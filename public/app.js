@@ -122,7 +122,8 @@ function cardHtml(c) {
     c.canal && `<span class="chip ${c.canal === 'En personne' ? 'phys' : ''}">${c.canal === 'En personne' ? '🤝 ' : ''}${esc(c.canal)}</span>`,
     c.type && `<span class="chip">${esc(c.type)}</span>`,
     needsRelance(c) && `<span class="chip warn">⏰ À relancer</span>`,
-    c.derniereRelance && `<span class="chip done">↻ Relance ${fmtDate(c.derniereRelance)}${+c.nbRelances > 1 ? ` (×${c.nbRelances})` : ''}</span>`,
+    c.brouillonRelance && `<span class="chip draft" title="Créé le ${fmtDate(c.brouillonRelance)} — envoie-le depuis Gmail">✏️ Brouillon à envoyer</span>`,
+    c.derniereRelance && `<span class="chip done">↻ Relancé ${fmtDate(c.derniereRelance)}${+c.nbRelances > 1 ? ` (×${c.nbRelances})` : ''}</span>`,
     isTodo(c) && `<span class="chip todo">✎ À compléter</span>`,
     c.dateEntretien && `<span class="chip">🎙️ ${fmtDate(c.dateEntretien)}</span>`,
   ].filter(Boolean).join('');
@@ -167,7 +168,10 @@ function renderList(rows) {
       <td>${esc(c.poste)}${c.notes ? `<div class="sub">${esc(c.notes)}</div>` : ''}</td>
       <td><span class="chip">${esc(c.canal)}</span></td>
       <td>${emails}${c.contact ? `<div class="sub">${esc(c.contact)}</div>` : ''}${c.adresse ? `<div class="sub"><a class="mail" href="${mapsUrl(c.adresse)}" target="_blank" rel="noopener">📍 ${esc(c.adresse)}</a></div>` : ''}</td>
-      <td><span class="pill"><span class="dot" style="--c:${color(c.statut)}"></span>${esc(STATUTS[c.statut]?.label)}</span></td>
+      <td><label class="statut-select" style="--c:${color(c.statut)}"><span class="dot"></span>
+        <select data-statut-id="${esc(c.id)}" aria-label="Statut de ${esc(c.entreprise)}">
+          ${Object.entries(STATUTS).map(([k, v]) => `<option value="${k}" ${k === c.statut ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}
+        </select></label></td>
       <td class="act">${c.thread ? `<a class="icon" href="${gmailUrl(c.thread)}" target="_blank" rel="noopener" title="Gmail">✉</a>` : ''}${firstEmail(c).length ? `<button class="icon relance" data-relance="${esc(c.id)}" title="Créer un brouillon de relance dans Gmail">↻</button>` : ''}<button class="icon edit" data-id="${esc(c.id)}" title="Modifier">✎</button></td>
     </tr>`;
   }).join('') || `<tr><td colspan="7" class="muted">Aucune candidature.</td></tr>`;
@@ -315,6 +319,11 @@ function bind() {
     sort = { key: th.dataset.sort, asc: sort.key === th.dataset.sort ? !sort.asc : true };
     render();
   }));
+  // Changement de statut directement depuis la liste
+  $('#list').addEventListener('change', (e) => {
+    const sel = e.target.closest('select[data-statut-id]');
+    if (sel) setStatut(sel.dataset.statutId, sel.value).catch((err) => { alert(err.message); render(); });
+  });
   $('#list').addEventListener('click', (e) => {
     const rb = e.target.closest('[data-relance]');
     if (rb) return relancer(items.find((c) => c.id === rb.dataset.relance));
@@ -426,7 +435,7 @@ async function relancer(c) {
     const res = await api('POST', `/api/candidatures/${c.id}/relance`, { to: draft.to, subject: draft.subject, body: draft.body });
     Object.assign(c, res);
     render();
-    toast(`Brouillon créé${res.draft?.inThread ? ' dans le fil d\'origine' : ''} ✉️ — ouvre tes brouillons Gmail pour l'envoyer`, DRAFTS_URL);
+    toast(`Brouillon créé${res.draft?.inThread ? ' dans le fil d\'origine' : ''} ✉️ — envoie-le depuis Gmail, l'appli se mettra à jour toute seule`, DRAFTS_URL);
   } catch (err) {
     alert(err.message);
   } finally {
@@ -526,10 +535,69 @@ function bindSettings() {
     try {
       config = await api('PUT', '/api/settings', settingsFormData());
       applyBranding(); render();
+      renderSyncLabel(null);
+      if (config.gmail) syncNow({ manual: true });
       $('#settings-dialog').close();
       toast(config.gmail ? 'Paramètres enregistrés ✔ — relances vers tes brouillons Gmail' : 'Paramètres enregistrés ✔');
     } catch (err) { alert(err.message); }
   });
+}
+
+// ---------- Synchronisation avec Gmail ----------
+// Au lancement, au retour sur l'onglet (ex. après avoir envoyé un mail dans Gmail) et toutes les 5 minutes.
+const SYNC_EVERY = 5 * 60 * 1000, SYNC_MIN_GAP = 30 * 1000;
+let lastSyncAt = 0, syncing = false;
+
+const timeAgo = (iso) => {
+  if (!iso) return 'jamais';
+  const s = Math.round((Date.now() - new Date(iso)) / 1000);
+  if (s < 60) return "à l'instant";
+  if (s < 3600) return `il y a ${Math.round(s / 60)} min`;
+  return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+};
+
+function renderSyncLabel(iso) {
+  $('#btn-sync').title = config.gmail ? `Synchroniser avec Gmail (dernière synchro : ${timeAgo(iso)})` : 'Configure Gmail dans ⚙️ Paramètres pour synchroniser';
+  $('#sync-label').textContent = config.gmail ? (iso ? `Synchro ${timeAgo(iso)}` : 'Synchroniser') : 'Synchroniser';
+}
+
+async function syncNow({ manual = false } = {}) {
+  if (syncing) return;
+  if (!config.gmail) {
+    // Sans Gmail : on recharge au moins les données (autre appareil, autre onglet).
+    items = await api('GET', '/api/candidatures');
+    render();
+    if (manual) toast('Configure Gmail dans ⚙️ Paramètres pour détecter tes envois et les réponses');
+    return;
+  }
+  if (!manual && Date.now() - lastSyncAt < SYNC_MIN_GAP) return;
+  syncing = true; lastSyncAt = Date.now();
+  $('#btn-sync').classList.add('busy');
+  try {
+    const res = await api('POST', '/api/sync');
+    items = res.items;
+    render();
+    renderSyncLabel(res.lastSync);
+    const rel = res.changes.filter((c) => c.type === 'relance'), rep = res.changes.filter((c) => c.type === 'reponse');
+    const parts = [];
+    if (rel.length) parts.push(`${rel.length} relance${rel.length > 1 ? 's' : ''} envoyée${rel.length > 1 ? 's' : ''} (${rel.map((c) => c.entreprise).slice(0, 3).join(', ')})`);
+    if (rep.length) parts.push(`${rep.length} réponse${rep.length > 1 ? 's' : ''} reçue${rep.length > 1 ? 's' : ''} (${rep.map((c) => c.entreprise).slice(0, 3).join(', ')})`);
+    if (parts.length) toast('📬 Gmail : ' + parts.join(' · '));
+    else if (manual) toast('Tout est à jour ✔');
+  } catch (err) {
+    if (manual) alert(err.message);
+  } finally {
+    syncing = false;
+    $('#btn-sync').classList.remove('busy');
+  }
+}
+
+function bindSync() {
+  $('#btn-sync').addEventListener('click', () => syncNow({ manual: true }));
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') syncNow(); });
+  window.addEventListener('focus', () => syncNow());
+  setInterval(() => { if (document.visibilityState === 'visible') syncNow(); }, SYNC_EVERY);
+  setInterval(() => renderSyncLabel(lastSyncAt ? new Date(lastSyncAt).toISOString() : null), 60 * 1000);
 }
 
 (async function main() {
@@ -547,4 +615,7 @@ function bindSettings() {
   if (params.toString()) history.replaceState(null, '', '/');
   if (params.get('action') === 'new') setTimeout(() => openForm(null), 0);
   render();
+  bindSync();
+  renderSyncLabel((await api('GET', '/api/sync')).lastSync);
+  syncNow();
 })();

@@ -238,3 +238,18 @@ body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inse
   input, select, textarea { font-size: 16px; } /* évite le zoom automatique sur iPhone */
 }
 @media (hover: none) { .card { cursor: pointer; } .card:hover { transform: none; } }
+
+/* synchronisation Gmail */
+.sync-btn { display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap; background: var(--surface); border-radius: 12px; padding: .62rem .85rem; color: var(--ink-2); }
+.sync-btn .spin { display: inline-block; }
+.sync-btn.busy .spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.chip.draft { background: rgba(144, 133, 233, .18); color: #c9c2ff; }
+@media (max-width: 700px) { #sync-label { display: none; } }
+
+/* sélecteur de statut dans la liste */
+.statut-select { display: inline-flex; align-items: center; gap: .4rem; padding: .2rem .25rem .2rem .55rem; border-radius: 999px;
+  border: 1px solid var(--c); background: rgba(255,255,255,.04); cursor: pointer; }
+.statut-select select { width: auto; border: 0; background: transparent; padding: .2rem 1.2rem .2rem 0; font-size: .8rem; font-weight: 600; color: var(--ink); cursor: pointer; box-shadow: none !important; }
+.statut-select select option { background: var(--surface-2); color: var(--ink); }
+.statut-select:focus-within { box-shadow: 0 0 0 3px rgba(139,92,246,.3); }
