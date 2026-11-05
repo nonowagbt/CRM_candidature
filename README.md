@@ -43,7 +43,12 @@ Le CRM s'installe comme une vraie appli (icône, fenêtre à part, plein écran 
 - Changer le statut directement dans le tableau remplit automatiquement la date de réponse ou d'entretien si elle est vide.
 - ✉ ouvre le fil Gmail correspondant, ✎ modifie la candidature.
 - Les entreprises en orange (« à compléter » / « à confirmer ») sont des candidatures Indeed dont l'entreprise n'apparaît pas dans l'email de confirmation.
-- Export CSV (ouvrable dans Excel), sauvegarde/restauration JSON.
+- **Import CSV depuis Excel ou Google Sheets** (menu ⋯ → 📊) : glisser-déposer, ou copier-coller des cellules.
+  Séparateur (`;` `,` tabulation) et encodage (UTF-8 / Windows-1252 d'Excel) détectés tout seuls ; les colonnes
+  (« Société », « Intitulé », « Date d'envoi », « État »…) sont reconnues et modifiables ; dates FR/US/ISO, numéros de série Excel
+  et statuts en texte libre (« Refusé », « en attente », « entretien le 12 ») convertis ; aperçu et doublons ignorés.
+  Un modèle de tableau est téléchargeable. Les fichiers `.xlsx` sont à enregistrer en « CSV UTF-8 » d'abord.
+- Export CSV prêt pour Excel (titres en français, dates JJ/MM/AAAA, réimportable tel quel), sauvegarde/restauration JSON.
 
 ## ⚙️ Paramètres
 

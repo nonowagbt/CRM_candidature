@@ -365,10 +365,15 @@ function download(name, content, type) {
 }
 
 function exportCsv() {
-  const cols = ['dateCandidature', 'entreprise', 'poste', 'type', 'canal', 'email', 'contact', 'statut', 'dateReponse', 'dateEntretien', 'lienOffre', 'adresse', 'notes'];
+  // Titres en français + dates JJ/MM/AAAA + « ; » : s'ouvre proprement dans Excel FR, et se réimporte tel quel.
+  const cols = [['dateCandidature', 'Date de candidature'], ['entreprise', 'Entreprise'], ['poste', 'Poste'], ['type', 'Type'], ['canal', 'Canal'],
+    ['email', 'Email'], ['contact', 'Contact'], ['statut', 'Statut'], ['dateReponse', 'Date de réponse'], ['dateEntretien', "Date d'entretien"],
+    ['lienOffre', "Lien de l'offre"], ['adresse', 'Adresse'], ['notes', 'Notes']];
+  const frDay = (d) => (d ? d.split('-').reverse().join('/') : '');
+  const value = (c, k) => (k === 'statut' ? STATUTS[c.statut]?.label : k.startsWith('date') ? frDay(c[k]) : c[k]);
   const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const lines = [cols.join(';'), ...filtered().map((c) => cols.map((k) => cell(k === 'statut' ? STATUTS[c.statut]?.label : c[k])).join(';'))];
-  download(`candidatures-${today()}.csv`, '﻿' + lines.join('\n'), 'text/csv');
+  const lines = [cols.map(([, l]) => cell(l)).join(';'), ...filtered().map((c) => cols.map(([k]) => cell(value(c, k))).join(';'))];
+  download(`candidatures-${today()}.csv`, '\ufeff' + lines.join('\r\n'), 'text/csv;charset=utf-8');
 }
 
 function bindDragAndDrop() {

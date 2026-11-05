@@ -493,6 +493,31 @@ function similarTitle(a, b) {
   return common / Math.min(A.size, B.size) >= 0.6; // 60 % des mots du plus court intitulé en commun
 }
 
+// Ajoute des lignes (déjà converties en champs du CRM) en ignorant les doublons.
+// dryRun : ne modifie rien, renvoie seulement le décompte (pour l'aperçu avant import).
+function addRows(items, rows, { dryRun = false } = {}) {
+  const now = new Date().toISOString();
+  const pool = dryRun ? [...items] : items;
+  let added = 0, skipped = 0, invalid = 0;
+  const duplicates = [];
+  for (const raw of rows.slice(0, 5000)) {
+    const r = sanitize(raw || {});
+    r.entreprise = (r.entreprise || '').trim();
+    if (!r.entreprise) { invalid++; continue; }
+    const dup = pool.find((c) => (r.lienOffre && c.lienOffre === r.lienOffre)
+      // identique (ex. réimport de notre propre export, y compris les entreprises « (à compléter) »)
+      || (norm(c.entreprise) === norm(r.entreprise) && norm(c.poste) === norm(r.poste) && (c.dateCandidature || '') === (r.dateCandidature || ''))
+      || (sameCompany(c.entreprise, r.entreprise) && similarTitle(c.poste || '', r.poste || '')));
+    if (dup) { skipped++; if (duplicates.length < 20) duplicates.push(`${r.entreprise} — ${r.poste || ''}`.trim()); continue; }
+    if (!STATUT_KEYS.includes(r.statut)) r.statut = 'postule';
+    for (const k of ['dateCandidature', 'dateReponse', 'dateEntretien']) if (r[k] && !/^\d{4}-\d{2}-\d{2}$/.test(r[k])) r[k] = '';
+    pool.push({ id: crypto.randomUUID(), createdAt: now, updatedAt: now, ...r });
+    added++;
+  }
+  return { added, skipped, invalid, duplicates };
+}
+const STATUT_KEYS = ['postule', 'repondu', 'entretien', 'retenu', 'refus_entretien', 'refus_direct', 'cloture'];
+
 function importLinkedinCsv(items, csv) {
   const rows = parseCsv(csv);
   if (rows.length < 2) throw new Error('Fichier vide ou illisible');
@@ -655,6 +680,13 @@ async function handleApi(req, res, url, method, user, session) {
         };
       }),
     });
+  }
+  if (url === '/api/import/rows' && method === 'POST') {
+    const body = await readBody(req);
+    if (!Array.isArray(body.rows)) return send(res, 400, { error: 'Un tableau « rows » est attendu' });
+    const result = addRows(items, body.rows, { dryRun: Boolean(body.dryRun) });
+    if (!body.dryRun && result.added) saveItems(user.id);
+    return send(res, 200, body.dryRun ? result : { ...result, items });
   }
   if (url === '/api/import/linkedin' && method === 'POST') {
     const body = await readBody(req);

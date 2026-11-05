@@ -37,9 +37,10 @@
         <button class="ghost" id="btn-menu" aria-haspopup="true">⋯</button>
         <div class="menu-pop" id="menu-pop" hidden>
           <button data-install hidden>📲 Installer l'appli</button>
-          <button id="btn-export-csv">Exporter en CSV</button>
+          <button id="btn-import-csv">📊 Importer un CSV (Excel, Google Sheets)</button>
+          <button id="btn-export-csv">Exporter en CSV (Excel)</button>
           <button id="btn-export-json">Sauvegarder (JSON)</button>
-          <label>Importer un JSON<input type="file" id="file-import" accept=".json" hidden></label>
+          <label>Restaurer une sauvegarde JSON<input type="file" id="file-import" accept=".json" hidden></label>
           <button id="btn-logout">Se déconnecter</button>
         </div>
       </div>
@@ -105,6 +106,47 @@
       </table>
     </div>
   </main>
+
+  <dialog id="csv-dialog" class="wide">
+    <form id="csv-form" method="dialog">
+      <div class="dlg-head">
+        <h2>📊 Importer un fichier Excel / Google Sheets</h2>
+        <button type="button" class="ghost x" id="csv-close" aria-label="Fermer">✕</button>
+      </div>
+
+      <section id="csv-step1">
+        <div class="dropzone" id="csv-drop">
+          <div class="dz-icon">📄</div>
+          <b>Dépose ton fichier CSV ici</b> ou
+          <label class="link">choisis-le<input type="file" id="csv-file" accept=".csv,.tsv,.txt,text/csv" hidden></label>
+          <p class="muted">Excel : <i>Fichier → Enregistrer sous → CSV</i> · Google Sheets : <i>Fichier → Télécharger → CSV</i></p>
+        </div>
+        <details class="howto">
+          <summary>… ou colle directement tes cellules (copier-coller depuis le tableur)</summary>
+          <textarea id="csv-paste" rows="5" placeholder="Sélectionne les cellules (avec la ligne des titres) dans Excel ou Google Sheets, Ctrl+C, puis Ctrl+V ici"></textarea>
+          <button type="button" class="ghost small-btn" id="csv-paste-go">Analyser le collage</button>
+        </details>
+        <p class="muted">Pas encore de tableau ? <a href="#" id="csv-template">Télécharge le modèle</a> (s'ouvre dans Excel et Google Sheets).</p>
+      </section>
+
+      <section id="csv-step2" hidden>
+        <p class="hint" id="csv-info"></p>
+        <h3 class="sub-h">Correspondance des colonnes</h3>
+        <p class="muted small">L'appli a deviné à quoi correspond chaque colonne : corrige si besoin. Seule « Entreprise » est obligatoire.</p>
+        <div class="map-table-wrap"><table class="map-table" id="csv-map"></table></div>
+        <h3 class="sub-h">Aperçu</h3>
+        <div class="map-table-wrap"><table class="preview-table" id="csv-preview"></table></div>
+        <p id="csv-summary" class="summary"></p>
+      </section>
+
+      <div class="form-actions">
+        <button type="button" class="ghost" id="csv-back" hidden>← Autre fichier</button>
+        <span class="spacer"></span>
+        <button type="button" class="ghost" id="csv-cancel">Annuler</button>
+        <button type="submit" class="cta" id="csv-go" disabled>Importer</button>
+      </div>
+    </form>
+  </dialog>
 
   <div class="drawer-backdrop" id="notif-backdrop" hidden></div>
   <aside class="drawer" id="notif-panel" aria-label="Notifications" hidden>
@@ -257,5 +299,6 @@
   <div class="offline-bar">Hors ligne — les modifications reprendront à la reconnexion</div>
   <script src="pwa.js"></script>
   <script src="app.js"></script>
+  <script src="import.js"></script>
 </body>
 </html>

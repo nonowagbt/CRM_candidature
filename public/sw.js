@@ -1,8 +1,8 @@
 // Service worker : rend l'interface disponible hors ligne.
 // - Pages, scripts, styles, icônes : réseau d'abord (toujours la dernière version), cache en secours.
 // - API (/api/…) : jamais mise en cache (données personnelles, sessions).
-const CACHE = 'crm-shell-v1';
-const SHELL = ['/', '/index.html', '/login.html', '/offline.html', '/style.css', '/app.js', '/login.js', '/pwa.js',
+const CACHE = 'crm-shell-v2';
+const SHELL = ['/', '/index.html', '/login.html', '/offline.html', '/style.css', '/app.js', '/login.js', '/pwa.js', '/import.js',
   '/manifest.webmanifest', '/icons/icon-192.png', '/icons/icon-512.png', '/icons/favicon-32.png'];
 
 self.addEventListener('install', (e) => {
