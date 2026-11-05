@@ -10,6 +10,18 @@ npm start        # ou : node server.js
 
 Puis ouvrir http://localhost:3000 (`npm install` d'abord, Node ≥ 18 — Node 20+ recommandé).
 
+## Appli web (PWA)
+
+Le CRM s'installe comme une vraie appli (icône, fenêtre à part, plein écran sur mobile) :
+
+- **Ordinateur (Chrome / Edge)** : icône ⊕ dans la barre d'adresse, ou menu ⋯ → « 📲 Installer l'appli ».
+- **Android (Chrome)** : bouton « Installer l'appli » sur la page de connexion / menu ⋯, ou menu Chrome → « Installer l'application ».
+- **iPhone (Safari)** : bouton Partager → « Sur l'écran d'accueil ».
+- Appui long sur l'icône installée : raccourcis « Nouvelle candidature » et « À relancer ».
+- Hors ligne : l'interface reste disponible et un bandeau le signale ; les données, elles, restent sur le serveur (jamais mises en cache).
+- L'installation exige **HTTPS** (ou `localhost`) : pour l'utiliser sur ton téléphone, le site doit être en ligne (voir plus bas).
+- Les icônes se régénèrent avec `node scripts/make-icons.js`.
+
 ## Comptes
 
 - Chaque personne crée son compte (email + mot de passe ≥ 8 caractères) sur la page de connexion.

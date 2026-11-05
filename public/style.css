@@ -208,3 +208,33 @@ legend { padding: 0 .4rem; font-weight: 600; color: var(--ink); }
 .account .avatar { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--grad); color: #fff; font-weight: 700; font-size: .72rem; }
 @media (max-width: 700px) { .account .mail-txt { display: none; } }
 #pwd-result.ok { color: #7fe0bd; } #pwd-result.err { color: #ff9b9b; }
+
+/* ---------- Appli web (PWA) & mobile ---------- */
+body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); -webkit-tap-highlight-color: transparent; }
+.offline-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 70; display: none; text-align: center; padding: .55rem 1rem calc(.55rem + env(safe-area-inset-bottom));
+  background: #3b2a06; color: #f3c46b; font-size: .82rem; border-top: 1px solid rgba(201,133,0,.4); }
+.is-offline .offline-bar { display: block; }
+[data-install] { width: 100%; }
+.menu-pop [data-install] { color: #7ee8fa; }
+@media (display-mode: standalone) { .top { padding-top: 1rem; } }
+
+@media (max-width: 700px) {
+  .top { padding-top: .9rem; }
+  h1 { font-size: 1.35rem; }
+  .logo { width: 40px; height: 40px; font-size: 1.3rem; }
+  .tagline { font-size: .78rem; }
+  .top-actions { width: 100%; }
+  #btn-add { flex: 1; }
+  #btn-add-physique { padding: .55rem .7rem; }
+  .kpis { grid-template-columns: repeat(2, 1fr); gap: .6rem; }
+  .kpi { padding: .8rem .9rem; }
+  .kpi .n { font-size: 1.6rem; }
+  /* colonnes du tableau : défilement horizontal aimanté, une colonne par écran */
+  .board { grid-auto-columns: 86%; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; }
+  .col { scroll-snap-align: start; max-height: 68vh; }
+  .card .links { opacity: 1; }        /* pas de survol au doigt : icônes toujours visibles */
+  .toolbar select { flex: 1; }
+  dialog { width: 100vw; max-width: 100vw; max-height: 92vh; margin: auto 0 0; border-radius: 20px 20px 0 0; }
+  input, select, textarea { font-size: 16px; } /* évite le zoom automatique sur iPhone */
+}
+@media (hover: none) { .card { cursor: pointer; } .card:hover { transform: none; } }

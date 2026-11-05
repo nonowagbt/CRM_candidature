@@ -541,5 +541,10 @@ function bindSettings() {
   $('#avatar').textContent = me.email.charAt(0).toUpperCase();
   [items, config] = await Promise.all([api('GET', '/api/candidatures'), api('GET', '/api/settings')]);
   applyBranding();
+  // Raccourcis de l'appli installée (appui long sur l'icône)
+  const params = new URLSearchParams(location.search);
+  if (params.get('filtre') && KPI_FILTERS[params.get('filtre')]) kpiFilter = params.get('filtre');
+  if (params.toString()) history.replaceState(null, '', '/');
+  if (params.get('action') === 'new') setTimeout(() => openForm(null), 0);
   render();
 })();
