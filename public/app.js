@@ -614,6 +614,7 @@ function openSettings() {
   $('#account-line').textContent = `Connecté en tant que ${me.email}`;
   if (!config.gmailUser && /@gmail\.com$/.test(me.email)) f.querySelector('[name="gmailUser"]').value = me.email;
   renderGmailStatus();
+  renderPlatforms();
   $('#settings-dialog').showModal();
 }
 
@@ -668,6 +669,59 @@ function bindSettings() {
       $('#settings-dialog').close();
       toast(config.gmail ? 'Paramètres enregistrés ✔ — relances vers tes brouillons Gmail' : 'Paramètres enregistrés ✔');
     } catch (err) { alert(err.message); }
+  });
+}
+
+// ---------- Plateformes (Paramètres) ----------
+const PLATFORM_LINKS = {
+  LinkedIn: { icon: 'in', color: '#0a66c2', applied: 'https://www.linkedin.com/my-items/saved-jobs/?cardType=APPLIED', notifs: 'https://www.linkedin.com/mypreferences/d/categories/notifications' },
+  Indeed: { icon: 'i', color: '#2557a7', applied: 'https://myjobs.indeed.com/applied', notifs: 'https://secure.indeed.com/settings' },
+  Hellowork: { icon: 'H', color: '#ff6a3d', applied: 'https://www.hellowork.com/fr-fr/candidat/mon-profil.html', notifs: 'https://www.hellowork.com/fr-fr/candidat/mon-profil.html' },
+  'Welcome to the Jungle': { icon: 'W', color: '#ffcd00', applied: 'https://www.welcometothejungle.com/fr/me', notifs: 'https://www.welcometothejungle.com/fr/me' },
+};
+
+async function renderPlatforms() {
+  const box = $('#platforms');
+  let data;
+  try { data = await api('GET', '/api/platforms'); } catch { box.textContent = ''; return; }
+  box.innerHTML = data.platforms.map((p) => {
+    const l = PLATFORM_LINKS[p.name];
+    let status, cls;
+    if (!data.gmail) { status = 'Gmail non connecté : renseigne-le ci-dessus pour suivre cette plateforme'; cls = 'off'; }
+    else if (p.mails) { status = `✅ Suivi actif via Gmail · ${p.mails} mail${p.mails > 1 ? 's' : ''} reçu${p.mails > 1 ? 's' : ''} · dernier ${relTime(p.lastMail)}`; cls = 'on'; }
+    else { status = 'Aucun mail reçu pour l\'instant : vérifie que les notifications email sont activées sur la plateforme'; cls = 'wait'; }
+    return `<div class="platform ${cls}">
+      <div class="p-logo" style="--pc:${l.color}">${esc(l.icon)}</div>
+      <div class="p-body">
+        <div class="p-name">${esc(p.name)} <span class="muted">· ${p.candidatures} candidature${p.candidatures > 1 ? 's' : ''} dans le CRM</span></div>
+        <div class="p-status">${status}</div>
+        <div class="p-actions">
+          <a class="ghost small-btn" href="${l.applied}" target="_blank" rel="noopener">Mes candidatures ↗</a>
+          <a class="ghost small-btn" href="${l.notifs}" target="_blank" rel="noopener">Activer les emails ↗</a>
+          ${p.name === 'LinkedIn' ? '<button type="button" class="ghost small-btn" data-li-import>📥 Importer l\'historique</button>' : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function bindPlatforms() {
+  $('#platforms').addEventListener('click', (e) => {
+    if (e.target.closest('[data-li-import]')) { const d = $('#li-import'); d.open = true; d.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  });
+  $('#li-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0]; if (!file) return;
+    const out = $('#li-result');
+    out.className = 'muted'; out.textContent = 'Import en cours…';
+    try {
+      if (file.size > 1.5e6) throw new Error('Fichier trop volumineux (1,5 Mo max)');
+      const r = await api('POST', '/api/import/linkedin', { csv: await file.text() });
+      items = r.items; render(); renderPlatforms();
+      out.className = 'ok';
+      out.textContent = `✔ ${r.added} candidature${r.added > 1 ? 's' : ''} ajoutée${r.added > 1 ? 's' : ''}${r.skipped ? ` · ${r.skipped} déjà présente${r.skipped > 1 ? 's' : ''}` : ''}`;
+      if (r.added) toast(`📥 LinkedIn : ${r.added} candidature${r.added > 1 ? 's' : ''} importée${r.added > 1 ? 's' : ''}`);
+    } catch (err) { out.className = 'err'; out.textContent = '✖ ' + err.message; }
+    e.target.value = '';
   });
 }
 
@@ -887,6 +941,7 @@ function bindSync() {
   bindRelance();
   bindSettings();
   bindNotifs();
+  bindPlatforms();
   me = await api('GET', '/api/auth/me');
   $('#account-email').textContent = me.email;
   $('#avatar').textContent = me.email.charAt(0).toUpperCase();

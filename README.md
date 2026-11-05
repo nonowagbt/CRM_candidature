@@ -65,7 +65,15 @@ La cloche en haut à droite liste les derniers mails liés à tes candidatures, 
 - un mail non reconnu peut être **associé** à une candidature (ses prochains mails seront reconnus) ou servir à **créer** une candidature ;
 - filtres : non lues, réponses & entretiens, refus, accusés de réception, à associer.
 
-LinkedIn et Indeed ne proposent pas d'accès à tes candidatures pour une appli externe : leurs notifications arrivent par mail, c'est par là que le CRM les suit.
+### 🔗 Plateformes (⚙️ Paramètres)
+
+LinkedIn et Indeed ne proposent aucun accès aux candidatures pour une appli externe, et confier son mot de passe LinkedIn/Indeed
+à un site tiers est contraire à leurs règles. La section **Plateformes** des paramètres :
+
+- montre pour LinkedIn, Indeed, Hellowork et Welcome to the Jungle si le **suivi via Gmail** fonctionne (nombre de mails reçus, dernier reçu) ;
+- donne les liens directs « Mes candidatures » et « Activer les emails » de chaque plateforme ;
+- **importe l'historique LinkedIn** : LinkedIn → Préférences → *Obtenir une copie de vos données* → fichier `Jobs/Job Applications.csv`
+  (les candidatures déjà présentes sont ignorées, même si l'intitulé diffère un peu).
 
 ## Relances → brouillons Gmail
 

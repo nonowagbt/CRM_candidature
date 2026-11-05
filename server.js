@@ -430,6 +430,98 @@ async function syncGmail(user) {
   try { return await job; } finally { syncRunning.delete(user.id); }
 }
 
+// ---------- Plateformes : suivi via Gmail + import de l'historique LinkedIn ----------
+const TRACKED_PLATFORMS = ['LinkedIn', 'Indeed', 'Hellowork', 'Welcome to the Jungle'];
+
+// Lecteur CSV minimal (guillemets, virgules et retours à la ligne dans les champs).
+function parseCsv(text) {
+  const rows = []; let row = [], field = '', q = false;
+  text = text.replace(/^﻿/, '');
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) {
+      if (ch === '"' && text[i + 1] === '"') { field += '"'; i++; }
+      else if (ch === '"') q = false;
+      else field += ch;
+    } else if (ch === '"') q = true;
+    else if (ch === ',') { row.push(field); field = ''; }
+    else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      row.push(field); field = '';
+      if (row.some((f) => f.trim())) rows.push(row);
+      row = [];
+    } else field += ch;
+  }
+  row.push(field);
+  if (row.some((f) => f.trim())) rows.push(row);
+  return rows;
+}
+
+// Dates LinkedIn : « 11/5/26, 9:19 AM » (mois/jour/année), parfois ISO.
+function parseLinkedinDate(v) {
+  v = String(v || '').trim();
+  let m = v.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m = v.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if (m) {
+    const y = m[3].length === 2 ? `20${m[3]}` : m[3];
+    return `${y}-${m[1].padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+  }
+  const d = new Date(v);
+  return isNaN(d) ? '' : d.toISOString().slice(0, 10);
+}
+
+function guessType(title) {
+  const t = norm(title);
+  if (/\b(stage|stagiaire|intern|internship)\b/.test(t)) return 'Stage';
+  if (/\b(alternance|alternant|apprenti|apprentissage)\b/.test(t)) return 'Alternance';
+  if (/\bcdd\b/.test(t)) return 'CDD';
+  if (/\b(freelance|independant)\b/.test(t)) return 'Freelance';
+  return 'CDI';
+}
+
+const titleWords = (t) => new Set(norm(t).split(' ').filter((w) => w.length > 2 && !['les', 'des', 'pour', 'avec', 'stage', 'h f', 'f h'].includes(w)));
+function sameCompany(a, b) {
+  const x = norm((a || '').replace(/\(.*?\)/g, '')).replace(/\b(inc|sas|sa|sarl|group|groupe|france|ltd|gmbh)\b/g, '').trim();
+  const y = norm((b || '').replace(/\(.*?\)/g, '')).replace(/\b(inc|sas|sa|sarl|group|groupe|france|ltd|gmbh)\b/g, '').trim();
+  return Boolean(x && y) && (x === y || (x.length >= 4 && y.includes(x)) || (y.length >= 4 && x.includes(y)));
+}
+function similarTitle(a, b) {
+  const A = titleWords(a), B = titleWords(b);
+  if (!A.size || !B.size) return norm(a) === norm(b);
+  const common = [...A].filter((w) => B.has(w)).length;
+  return common / Math.min(A.size, B.size) >= 0.6; // 60 % des mots du plus court intitulé en commun
+}
+
+function importLinkedinCsv(items, csv) {
+  const rows = parseCsv(csv);
+  if (rows.length < 2) throw new Error('Fichier vide ou illisible');
+  const head = rows[0].map((h) => norm(h));
+  const col = (...names) => head.findIndex((h) => names.some((n) => h.includes(n)));
+  const iDate = col('application date', 'date'), iCompany = col('company'), iTitle = col('job title', 'title'),
+    iUrl = col('job url', 'url'), iEmail = col('contact email', 'email');
+  if (iCompany === -1 || iTitle === -1) throw new Error("Ce n'est pas le fichier « Job Applications.csv » de LinkedIn (colonnes Company Name / Job Title introuvables)");
+  const now = new Date().toISOString();
+  let added = 0, skipped = 0;
+  for (const r of rows.slice(1)) {
+    const entreprise = (r[iCompany] || '').trim(), poste = (r[iTitle] || '').trim();
+    if (!entreprise && !poste) continue;
+    const lienOffre = iUrl >= 0 ? (r[iUrl] || '').trim() : '';
+    const date = iDate >= 0 ? parseLinkedinDate(r[iDate]) : '';
+    // Doublon : même lien d'offre, ou même entreprise (même partiellement) + intitulé de poste proche.
+    const dup = items.some((c) => (lienOffre && c.lienOffre === lienOffre) || (sameCompany(c.entreprise, entreprise) && similarTitle(c.poste, poste)));
+    if (dup) { skipped++; continue; }
+    const email = iEmail >= 0 && EMAIL_RE.test((r[iEmail] || '').trim()) ? r[iEmail].trim() : '';
+    items.push({
+      id: crypto.randomUUID(), createdAt: now, updatedAt: now, entreprise: entreprise || 'À compléter', poste,
+      type: guessType(poste), canal: 'LinkedIn', email, lienOffre: /^https?:\/\//.test(lienOffre) ? lienOffre : '',
+      dateCandidature: date, statut: 'postule', notes: 'Importée depuis l\'historique LinkedIn.',
+    });
+    added++;
+  }
+  return { added, skipped };
+}
+
 // ---------- HTTP ----------
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -546,6 +638,29 @@ async function handleApi(req, res, url, method, user, session) {
     s.items = body.slice(0, 5000).map((c) => ({ id: crypto.randomUUID(), createdAt: c.createdAt || now, updatedAt: now, ...sanitize(c) }));
     saveItems(user.id);
     return send(res, 200, { count: s.items.length });
+  }
+
+  // ---- Plateformes ----
+  if (url === '/api/platforms' && method === 'GET') {
+    const list = readJson(notifFile(user.id), []);
+    const gmail = Boolean(s.settings.gmailUser && s.settings.gmailAppPasswordEnc);
+    const lastSync = readJson(syncFile(user.id), {}).lastSync || null;
+    return send(res, 200, {
+      gmail, lastSync,
+      platforms: TRACKED_PLATFORMS.map((name) => {
+        const mails = list.filter((n) => n.platform === name);
+        return {
+          name, mails: mails.length, lastMail: mails.reduce((m, n) => (n.date > m ? n.date : m), '') || null,
+          candidatures: items.filter((c) => c.canal === name).length,
+        };
+      }),
+    });
+  }
+  if (url === '/api/import/linkedin' && method === 'POST') {
+    const body = await readBody(req);
+    const result = importLinkedinCsv(items, String(body.csv || '').slice(0, 1.5e6));
+    if (result.added) saveItems(user.id);
+    return send(res, 200, { ...result, items });
   }
 
   // ---- Synchronisation Gmail ----

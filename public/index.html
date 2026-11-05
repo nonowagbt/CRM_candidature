@@ -213,6 +213,27 @@
       </fieldset>
 
       <fieldset>
+        <legend>🔗 Plateformes — LinkedIn, Indeed…</legend>
+        <p class="hint">LinkedIn et Indeed ne permettent pas à une appli externe de lire tes candidatures (et donner ton mot de passe
+          LinkedIn/Indeed à un site tiers est contraire à leurs règles). Le CRM suit donc leurs <b>notifications par email</b> via ta connexion Gmail,
+          et peut importer ton <b>historique LinkedIn</b>.</p>
+        <div class="platforms" id="platforms"></div>
+        <details class="howto" id="li-import">
+          <summary>📥 Importer mon historique de candidatures LinkedIn</summary>
+          <ol>
+            <li>Sur LinkedIn : <a href="https://www.linkedin.com/mypreferences/d/download-my-data" target="_blank" rel="noopener">Préférences → Obtenir une copie de vos données</a>,
+              coche <b>« Candidatures »</b> (ou tout télécharger) puis demande l'archive.</li>
+            <li>Quand LinkedIn t'envoie le lien (quelques minutes), télécharge le .zip et ouvre-le.</li>
+            <li>Dépose ici le fichier <code>Jobs/Job Applications.csv</code> :</li>
+          </ol>
+          <div class="row">
+            <label class="ghost small-btn file-btn">Choisir le fichier CSV<input type="file" id="li-file" accept=".csv,text/csv" hidden></label>
+            <span id="li-result" class="muted"></span>
+          </div>
+        </details>
+      </fieldset>
+
+      <fieldset>
         <legend>🔐 Mon compte</legend>
         <p class="muted" id="account-line"></p>
         <div class="grid">
