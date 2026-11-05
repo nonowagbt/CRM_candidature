@@ -22,6 +22,7 @@
     <div class="top-actions">
       <button id="btn-add-physique" class="ghost" title="CV déposé sur place">📍 Candidature sur place</button>
       <button id="btn-add" class="cta">＋ Nouvelle candidature</button>
+      <span class="account" id="account" title="Compte connecté"><span class="avatar" id="avatar"></span><span class="mail-txt" id="account-email"></span></span>
       <button class="ghost" id="btn-settings" title="Paramètres">⚙️</button>
       <div class="menu">
         <button class="ghost" id="btn-menu" aria-haspopup="true">⋯</button>
@@ -29,6 +30,7 @@
           <button id="btn-export-csv">Exporter en CSV</button>
           <button id="btn-export-json">Sauvegarder (JSON)</button>
           <label>Importer un JSON<input type="file" id="file-import" accept=".json" hidden></label>
+          <button id="btn-logout">Se déconnecter</button>
         </div>
       </div>
     </div>
@@ -156,6 +158,19 @@
           <textarea name="pitch" rows="3" placeholder="Étudiant en … je recherche un stage de … à partir de …"></textarea></label>
         <label>Signature
           <textarea name="signature" rows="4" placeholder="Prénom Nom&#10;06 …&#10;email@…&#10;linkedin.com/in/…"></textarea></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>🔐 Mon compte</legend>
+        <p class="muted" id="account-line"></p>
+        <div class="grid">
+          <label>Mot de passe actuel<input id="pwd-current" type="password" autocomplete="current-password"></label>
+          <label>Nouveau mot de passe<input id="pwd-next" type="password" autocomplete="new-password" minlength="8"></label>
+        </div>
+        <div class="row">
+          <button type="button" class="ghost" id="pwd-change">Changer mon mot de passe</button>
+          <span id="pwd-result" class="muted"></span>
+        </div>
       </fieldset>
 
       <div class="form-actions">

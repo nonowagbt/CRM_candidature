@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Connexion · CRM Candidatures</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="auth-page">
+  <div class="glow g1"></div><div class="glow g2"></div>
+  <main class="auth">
+    <div class="brand">
+      <div class="logo">⚽</div>
+      <div>
+        <h1>CRM <span class="grad">Candidatures</span></h1>
+        <p class="tagline">Suis tes candidatures, tes entretiens et tes relances.</p>
+      </div>
+    </div>
+
+    <div class="panel auth-card">
+      <div class="seg auth-tabs" role="tablist">
+        <button type="button" data-mode="login" class="on">Connexion</button>
+        <button type="button" data-mode="signup">Créer un compte</button>
+      </div>
+      <p class="hint" id="first-hint" hidden>Premier compte : il récupérera les candidatures déjà présentes sur ce serveur.</p>
+      <form id="auth-form">
+        <label>Email<input name="email" type="email" autocomplete="email" required></label>
+        <label>Mot de passe<input name="password" type="password" autocomplete="current-password" minlength="8" required></label>
+        <label id="confirm-wrap" hidden>Confirme le mot de passe<input name="confirm" type="password" autocomplete="new-password" minlength="8"></label>
+        <p class="error" id="auth-error" hidden></p>
+        <button type="submit" class="cta" id="auth-submit">Se connecter</button>
+      </form>
+    </div>
+  </main>
+  <script src="login.js"></script>
+</body>
+</html>

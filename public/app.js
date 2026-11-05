@@ -43,10 +43,12 @@ const lastContact = (c) => (c.derniereRelance && c.derniereRelance > (c.dateCand
 const needsRelance = (c) => ['postule', 'repondu'].includes(c.statut) && daysSince(lastContact(c)) >= relanceJours();
 const firstEmail = (c) => (c.email || '').split(',').map((e) => e.trim()).filter(Boolean);
 let config = { gmail: false, gmailUser: '', hasPassword: false, senderName: '', titre: 'Mes candidatures', tagline: '', pitch: '', signature: '', relanceJours: 21 };
+let me = { email: '' };
 const relanceJours = () => +config.relanceJours || 21;
 
 async function api(method, url, body) {
   const res = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+  if (res.status === 401) { location.replace('/login.html'); throw new Error('Session expirée, reconnecte-toi'); }
   if (!res.ok && res.status !== 204) throw new Error((await res.json().catch(() => ({}))).error || `Erreur ${res.status}`);
   return res.status === 204 ? null : res.json();
 }
@@ -471,6 +473,9 @@ function openSettings() {
   }
   f.querySelector('[name="gmailAppPassword"]').value = '';
   const tr = $('#test-result'); tr.textContent = ''; tr.className = 'muted';
+  $('#pwd-result').textContent = '';
+  $('#account-line').textContent = `Connecté en tant que ${me.email}`;
+  if (!config.gmailUser && /@gmail\.com$/.test(me.email)) f.querySelector('[name="gmailUser"]').value = me.email;
   renderGmailStatus();
   $('#settings-dialog').showModal();
 }
@@ -502,6 +507,20 @@ function bindSettings() {
     config = await api('PUT', '/api/settings', { clearPassword: true });
     renderGmailStatus(); toast('Mot de passe effacé');
   });
+  $('#pwd-change').addEventListener('click', async () => {
+    const out = $('#pwd-result');
+    const current = $('#pwd-current').value, next = $('#pwd-next').value;
+    if (next.length < 8) { out.className = 'err'; out.textContent = '8 caractères minimum'; return; }
+    try {
+      await api('POST', '/api/auth/password', { current, next });
+      $('#pwd-current').value = ''; $('#pwd-next').value = '';
+      out.className = 'ok'; out.textContent = '✔ Mot de passe changé (tes autres appareils sont déconnectés)';
+    } catch (err) { out.className = 'err'; out.textContent = '✖ ' + err.message; }
+  });
+  $('#btn-logout').addEventListener('click', async () => {
+    await fetch('/api/auth/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    location.replace('/login.html');
+  });
   $('#settings-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
@@ -517,6 +536,9 @@ function bindSettings() {
   bind();
   bindRelance();
   bindSettings();
+  me = await api('GET', '/api/auth/me');
+  $('#account-email').textContent = me.email;
+  $('#avatar').textContent = me.email.charAt(0).toUpperCase();
   [items, config] = await Promise.all([api('GET', '/api/candidatures'), api('GET', '/api/settings')]);
   applyBranding();
   render();
