@@ -253,3 +253,28 @@ body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inse
 .statut-select select { width: auto; border: 0; background: transparent; padding: .2rem 1.2rem .2rem 0; font-size: .8rem; font-weight: 600; color: var(--ink); cursor: pointer; box-shadow: none !important; }
 .statut-select select option { background: var(--surface-2); color: var(--ink); }
 .statut-select:focus-within { box-shadow: 0 0 0 3px rgba(139,92,246,.3); }
+
+/* graphique */
+.chart-panel { margin: 0 2rem 1rem; padding: 1rem 1.2rem .8rem; }
+.chart-panel .panel-head { align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+.chart-panel .panel-head .muted { font-size: .8rem; }
+.seg.small button { padding: .35rem .7rem; font-size: .8rem; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: .3rem 1rem; font-size: .8rem; color: var(--ink-2); margin: -.2rem 0 .3rem; }
+.chart-legend span { display: inline-flex; align-items: center; gap: .4rem; }
+.key { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: .35rem; vertical-align: -1px; }
+.chart-legend .key { margin-right: 0; }
+.chart { width: 100%; }
+.chart svg { display: block; overflow: visible; }
+.chart .grid { stroke: rgba(255,255,255,.07); stroke-width: 1; }
+.chart .axis { stroke: rgba(255,255,255,.18); stroke-width: 1; }
+.chart .tick { fill: var(--muted); font-size: 11px; font-family: Inter, system-ui, sans-serif; }
+.chart .peak { fill: var(--ink); font-size: 12px; font-weight: 600; font-family: Inter, system-ui, sans-serif; }
+.chart .hit { fill: transparent; cursor: default; }
+.chart .hit.on { fill: rgba(255,255,255,.04); }
+.chart-data { margin-top: .4rem; font-size: .8rem; color: var(--ink-2); }
+.chart-data summary { cursor: pointer; color: var(--muted); width: fit-content; }
+.chart-data summary:hover { color: var(--ink); }
+.chart-data table { margin-top: .5rem; max-height: 260px; display: block; overflow: auto; }
+.chart-data th, .chart-data td { padding: .35rem .7rem; }
+.tooltip .key { margin-right: .3rem; }
+@media (max-width: 700px) { .chart-panel { margin: 0 1rem 1rem; } }

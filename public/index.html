@@ -47,6 +47,26 @@
 
   <section class="kpis" id="kpis"></section>
 
+  <section class="panel chart-panel" aria-labelledby="chart-title">
+    <div class="panel-head">
+      <div>
+        <h2 id="chart-title">Candidatures envoyées</h2>
+        <span class="muted" id="chart-sub"></span>
+      </div>
+      <div class="seg small" id="chart-range" role="tablist" aria-label="Période">
+        <button data-range="3m" class="on">3 mois</button>
+        <button data-range="6m">6 mois</button>
+        <button data-range="all">Tout</button>
+      </div>
+    </div>
+    <div class="chart-legend" id="chart-legend"></div>
+    <div class="chart" id="chart" role="img"></div>
+    <details class="chart-data">
+      <summary>Voir les données</summary>
+      <table id="chart-table"></table>
+    </details>
+  </section>
+
   <section class="panel pipeline">
     <div class="panel-head">
       <h2>Pipeline</h2>

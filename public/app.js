@@ -183,8 +183,130 @@ function renderList(rows) {
   }).join('') || `<tr><td colspan="7" class="muted">Aucune candidature.</td></tr>`;
 }
 
+// ---------- Graphique : candidatures envoyées par période, empilées selon leur issue ----------
+const CHART_SERIES = [ // de bas en haut (ordre validé pour que deux couleurs voisines restent distinctes)
+  { key: 'positif', label: 'Réponse / entretien', color: 'var(--s-repondu)', statuts: ['repondu', 'entretien', 'retenu'] },
+  { key: 'attente', label: 'En attente', color: 'var(--s-postule)', statuts: ['postule'] },
+  { key: 'refus', label: 'Refus / clôturé', color: 'var(--s-refus_direct)', statuts: ['refus_entretien', 'refus_direct', 'cloture'] },
+];
+let chartRange = localStorage.getItem('crm-chart-range') || '3m';
+
+const startOfWeek = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x; };
+const startOfMonth = (d) => { const x = new Date(d); return new Date(x.getFullYear(), x.getMonth(), 1); };
+
+function chartBuckets() {
+  const dated = items.filter((c) => c.dateCandidature).map((c) => ({ c, d: new Date(c.dateCandidature + 'T00:00:00') }));
+  const now = new Date();
+  const weeksBack = chartRange === '3m' ? 13 : 26;
+  const oldest = dated.reduce((m, x) => (x.d < m ? x.d : m), now);
+  const monthly = chartRange === 'all' && (now - oldest) / 864e5 > 26 * 7;
+  const step = monthly ? startOfMonth : startOfWeek;
+  const start = chartRange === 'all' ? step(oldest) : startOfWeek(new Date(now.getFullYear(), now.getMonth(), now.getDate() - (weeksBack - 1) * 7));
+  const buckets = [];
+  // Avance par date calendaire (et non +7×24 h) pour rester juste au changement d'heure.
+  for (let b = new Date(start); b <= now; b = monthly ? new Date(b.getFullYear(), b.getMonth() + 1, 1) : new Date(b.getFullYear(), b.getMonth(), b.getDate() + 7)) {
+    buckets.push({ start: new Date(b), positif: 0, attente: 0, refus: 0, total: 0 });
+  }
+  for (const { c, d } of dated) {
+    if (d < start) continue;
+    const key = step(d).getTime();
+    const bucket = buckets.find((x) => x.start.getTime() === key);
+    const serie = CHART_SERIES.find((s) => s.statuts.includes(c.statut));
+    if (bucket && serie) { bucket[serie.key]++; bucket.total++; }
+  }
+  return { buckets, monthly };
+}
+
+const bucketLabel = (b, monthly, long) => monthly
+  ? b.start.toLocaleDateString('fr-FR', { month: long ? 'long' : 'short', year: long ? 'numeric' : '2-digit' })
+  : (long ? 'Semaine du ' : '') + b.start.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+
+function niceMax(v) {
+  if (v <= 4) return 4;
+  const pow = 10 ** Math.floor(Math.log10(v));
+  const n = [1, 2, 2.5, 5, 10].find((m) => m * pow >= v);
+  return n * pow;
+}
+
+function renderChart() {
+  const el = $('#chart');
+  const { buckets, monthly } = chartBuckets();
+  const W = Math.max(280, el.clientWidth || 800), H = 190;
+  const m = { top: 18, right: 8, bottom: 24, left: 30 };
+  const iw = W - m.left - m.right, ih = H - m.top - m.bottom;
+  const max = niceMax(Math.max(1, ...buckets.map((b) => b.total)));
+  const ticks = [0, max / 4, max / 2, (3 * max) / 4, max].filter((t) => Number.isInteger(t));
+  const y = (v) => m.top + ih - (v / max) * ih;
+  const band = iw / Math.max(1, buckets.length);
+  const bw = Math.min(24, band * 0.62);
+  const GAP = 2;
+  const total = buckets.reduce((s, b) => s + b.total, 0);
+  const peak = buckets.reduce((best, b) => (b.total > (best?.total || 0) ? b : best), null);
+  // Étiquettes de l'axe X : une sur n pour qu'elles ne se chevauchent pas (~46px chacune)
+  const every = Math.max(1, Math.ceil(46 / band));
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" aria-hidden="true">`;
+  for (const t of ticks) {
+    svg += `<line x1="${m.left}" x2="${W - m.right}" y1="${y(t)}" y2="${y(t)}" class="grid"/>`;
+    svg += `<text x="${m.left - 8}" y="${y(t) + 4}" class="tick" text-anchor="end">${t}</text>`;
+  }
+  buckets.forEach((b, i) => {
+    const cx = m.left + band * i + band / 2, x = cx - bw / 2;
+    let base = 0;
+    const segs = CHART_SERIES.filter((s) => b[s.key] > 0);
+    segs.forEach((s, j) => {
+      const y0 = y(base), y1 = y(base + b[s.key]);
+      const top = j === segs.length - 1;
+      const h = Math.max(1, y0 - y1 - (j > 0 ? GAP : 0));   // 2px d'air entre deux segments
+      const yb = y0 - (j > 0 ? GAP : 0);
+      const r = top ? Math.min(4, h, bw / 2) : 0;          // bout arrondi, base carrée
+      svg += `<path fill="${s.color}" d="M${x},${yb} V${yb - h + r} Q${x},${yb - h} ${x + r},${yb - h} H${x + bw - r} Q${x + bw},${yb - h} ${x + bw},${yb - h + r} V${yb} Z"/>`;
+      base += b[s.key];
+    });
+    if (b === peak && b.total > 0) svg += `<text x="${cx}" y="${y(b.total) - 6}" class="peak" text-anchor="middle">${b.total}</text>`;
+    if (i % every === 0) svg += `<text x="${cx}" y="${H - 6}" class="tick" text-anchor="middle">${esc(bucketLabel(b, monthly))}</text>`;
+    // zone de survol plus large que la barre
+    svg += `<rect x="${m.left + band * i}" y="${m.top}" width="${band}" height="${ih}" class="hit" data-i="${i}"/>`;
+  });
+  svg += `<line x1="${m.left}" x2="${W - m.right}" y1="${y(0)}" y2="${y(0)}" class="axis"/></svg>`;
+  el.innerHTML = svg;
+  el._buckets = buckets; el._monthly = monthly;
+
+  const label = monthly ? 'par mois' : 'par semaine';
+  const periode = chartRange === '3m' ? 'sur 3 mois' : chartRange === '6m' ? 'sur 6 mois' : 'au total';
+  $('#chart-sub').textContent = `${total} candidature${total > 1 ? 's' : ''} ${periode}, ${label}${peak && peak.total ? ` · record : ${peak.total} (${bucketLabel(peak, monthly, true).toLowerCase()})` : ''}`;
+  el.setAttribute('aria-label', `Candidatures envoyées ${label} : ${total} au total. Détail dans « Voir les données ».`);
+  $('#chart-legend').innerHTML = CHART_SERIES.map((s) => `<span><i class="key" style="background:${s.color}"></i>${esc(s.label)}</span>`).join('');
+  document.querySelectorAll('#chart-range button').forEach((b) => b.classList.toggle('on', b.dataset.range === chartRange));
+  $('#chart-table').innerHTML = `<thead><tr><th>${monthly ? 'Mois' : 'Semaine'}</th>${CHART_SERIES.map((s) => `<th>${esc(s.label)}</th>`).join('')}<th>Total</th></tr></thead><tbody>` +
+    buckets.map((b) => `<tr><td>${esc(bucketLabel(b, monthly, true))}</td>${CHART_SERIES.map((s) => `<td>${b[s.key]}</td>`).join('')}<td><b>${b.total}</b></td></tr>`).join('') + '</tbody>';
+}
+
+function bindChart() {
+  const el = $('#chart'), tip = $('#tooltip');
+  el.addEventListener('mousemove', (e) => {
+    const hit = e.target.closest('.hit');
+    el.querySelectorAll('.hit.on').forEach((h) => h !== hit && h.classList.remove('on'));
+    if (!hit) { tip.hidden = true; return; }
+    hit.classList.add('on');
+    const b = el._buckets[+hit.dataset.i];
+    tip.innerHTML = `<b>${esc(bucketLabel(b, el._monthly, true))}</b><br>${b.total} candidature${b.total > 1 ? 's' : ''}` +
+      CHART_SERIES.filter((s) => b[s.key]).map((s) => `<br><i class="key" style="background:${s.color}"></i>${esc(s.label)} : ${b[s.key]}`).join('');
+    tip.hidden = false;
+    tip.style.left = `${Math.min(e.clientX + 14, window.innerWidth - 220)}px`;
+    tip.style.top = `${e.clientY - 70}px`;
+  });
+  el.addEventListener('mouseleave', () => { tip.hidden = true; el.querySelectorAll('.hit.on').forEach((h) => h.classList.remove('on')); });
+  $('#chart-range').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-range]'); if (!b) return;
+    chartRange = b.dataset.range; localStorage.setItem('crm-chart-range', chartRange); renderChart();
+  });
+  let t; window.addEventListener('resize', () => { clearTimeout(t); t = setTimeout(renderChart, 120); });
+}
+
 function render() {
   renderKpis();
+  renderChart();
   renderPipeline();
   const rows = filtered();
   $('#board').hidden = view !== 'board';
@@ -608,6 +730,7 @@ function bindSync() {
 
 (async function main() {
   bind();
+  bindChart();
   bindRelance();
   bindSettings();
   me = await api('GET', '/api/auth/me');
