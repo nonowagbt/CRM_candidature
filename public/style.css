@@ -43,7 +43,7 @@ button, .menu-pop label { font: inherit; color: var(--ink); cursor: pointer; bor
 .danger:hover { background: rgba(230,103,103,.12); }
 
 /* en-tête */
-.top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; padding: 1.6rem 2rem .6rem; }
+.top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; padding: 2.6rem 2rem 1rem; }
 .brand { display: flex; align-items: center; gap: .9rem; }
 .logo { width: 48px; height: 48px; display: grid; place-items: center; font-size: 1.6rem; border-radius: 14px;
   background: var(--grad); box-shadow: 0 10px 30px -10px rgba(139,92,246,.9); }
@@ -216,10 +216,10 @@ body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inse
 .is-offline .offline-bar { display: block; }
 [data-install] { width: 100%; }
 .menu-pop [data-install] { color: #7ee8fa; }
-@media (display-mode: standalone) { .top { padding-top: 1rem; } }
+@media (display-mode: standalone) { .top { padding-top: 2.2rem; } }
 
 @media (max-width: 700px) {
-  .top { padding-top: .9rem; }
+  .top { padding-top: 1.8rem; }
   h1 { font-size: 1.35rem; }
   .logo { width: 40px; height: 40px; font-size: 1.3rem; }
   .tagline { font-size: .78rem; }
