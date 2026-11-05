@@ -47,7 +47,13 @@ let me = { email: '' };
 const relanceJours = () => +config.relanceJours || 21;
 
 async function api(method, url, body) {
-  const res = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+  // Toute écriture envoie du JSON (le serveur l'exige, c'est sa protection anti-CSRF), même sans contenu.
+  const write = method !== 'GET' && method !== 'DELETE';
+  const res = await fetch(url, {
+    method,
+    headers: write ? { 'Content-Type': 'application/json' } : {},
+    body: write ? JSON.stringify(body ?? {}) : undefined,
+  });
   if (res.status === 401) { location.replace('/login.html'); throw new Error('Session expirée, reconnecte-toi'); }
   if (!res.ok && res.status !== 204) throw new Error((await res.json().catch(() => ({}))).error || `Erreur ${res.status}`);
   return res.status === 204 ? null : res.json();
