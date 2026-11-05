@@ -1,0 +1,13 @@
+{
+  "name": "crm-candidature",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CRM local pour suivre mes candidatures",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "imapflow": "^2.10.2",
+    "nodemailer": "^10.3.1"
+  }
+}

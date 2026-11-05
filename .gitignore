@@ -1,0 +1,5 @@
+# Données personnelles (candidatures, emails de recruteurs)
+# tout le dossier data/ : candidatures, emails des recruteurs, paramètres (mot de passe Gmail)
+data/
+node_modules/
+.env
