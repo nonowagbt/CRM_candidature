@@ -186,7 +186,7 @@ function migrateLegacy(user) {
 const ALLOWED_FIELDS = [
   'entreprise', 'poste', 'type', 'canal', 'email', 'contact', 'lienOffre',
   'dateCandidature', 'dateReponse', 'dateEntretien', 'statut', 'notes', 'thread', 'adresse',
-  'derniereRelance', 'nbRelances',
+  'derniereRelance', 'nbRelances', 'brouillonRelance',
 ];
 function sanitize(body) {
   const out = {};
@@ -243,6 +243,191 @@ async function createGmailDraft(settings, { to, subject, text, thread }) {
   } finally {
     await client.logout().catch(() => {});
   }
+}
+
+// ---------- Synchronisation avec Gmail + centre de notifications ----------
+// Lit les mails récents (envoyés et reçus) :
+//  - mail envoyé après la candidature → relance (date, compteur) ;
+//  - mail reçu lié à une candidature ou au recrutement → notification classée (refus, entretien,
+//    accusé de réception, offre clôturée, réponse) avec statut suggéré ;
+//    « Postulé » passe à « Réponse reçue » pour une vraie réponse (pas un simple accusé de réception).
+// Correspondance : fil Gmail, adresse exacte, puis nom de l'entreprise (utile pour Indeed, LinkedIn…).
+const { simpleParser } = require('mailparser');
+const SYNC_FIRST_DAYS = 60;
+const syncFile = (userId) => path.join(userDir(userId), 'sync.json');
+const notifFile = (userId) => path.join(userDir(userId), 'notifications.json');
+const syncRunning = new Map();
+const addrList = (c) => (c.email || '').toLowerCase().split(/[,;]/).map((e) => e.trim()).filter(Boolean);
+const dayOf = (d) => new Date(d).toISOString().slice(0, 10);
+const frDate = (d) => d.split('-').reverse().join('/');
+const norm = (t) => (t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+
+const PLATFORMS = [
+  ['Indeed', /(^|\.)indeed\.com$/], ['LinkedIn', /(^|\.)linkedin\.com$/], ['Hellowork', /(^|\.)hellowork\.com$/],
+  ['Welcome to the Jungle', /welcometothejungle\.com$|welcomekit\.co$/], ['JobTeaser', /jobteaser\.com$/], ['APEC', /apec\.fr$/],
+  ['France Travail', /francetravail\.fr$|pole-emploi\.fr$/],
+  ['Site carrière', /successfactors|myworkday|smartrecruiters|teamtailor|taleez|digitalrecruiters|beetween|njoyn|recruitee|lever\.co|greenhouse|join\.com|gestmax|csod|oraclecloud|cloud\.oracle\.com|jobvite|icims|talent-soft|flatchr/],
+];
+// Alertes d'offres, newsletters : jamais de notification.
+const NOISE_FROM = /match\.indeed\.com|jobalert\.indeed\.com|notification@emails\.hellowork|newsletter@|alerte@emails\.hellowork|jobs-listings@linkedin|jobalerts-noreply@linkedin|news@|marketing@|twinehq\.com/;
+// Mails automatiques des plateformes qui ne sont pas des réponses (sondages, rappels, activation de compte…).
+const NOISE_SUBJECT = /^suite de votre candidature au poste|avez[- ]vous finalis|finalisez votre candidature|r[ée]capitulatif de votre semaine|vient de consulter votre (cv|profil)|account created|confirmation de votre identit|identit[ée] confirm|activation de la prochaine|activez votre|activate your|complete your (profile|candidate)|votre avis à la suite/i;
+const RECRUIT_RE = /candidature|postul|application|entretien|interview|recrutement|recruit|stage|alternance|poste|offre d.emploi|ton profil|votre profil/i;
+const KINDS = {
+  refus: /(ne (pouvons|pourrons|sommes) pas (en mesure de )?(donner|y donner|réserver) (une )?suite|pas (pu )?(été )?retenue?|au regret|malheureusement|regrettons|not (been )?(selected|moving forward)|unfortunately|ne correspond (malheureusement )?pas|autres? profils?|poste (a été |est )?pourvu|offre (a été )?pourvue|n'a pas été retenue|décidé de ne pas donner suite|aucun poste|pas de (poste|besoin)|n'ayant pas de (besoin|poste)|équipe (est )?(déjà )?complète|passé à l'étape suivante.{0,80}sans)/i,
+  entretien: /(entretien|interview|rendez-vous|rdv|créneau|disponibilit|échanger (ensemble|avec (vous|toi))|appel (téléphonique|visio)|visio|teams|google meet|calendly|bookings|rencontrer)/i,
+  cloture: /(n'est plus disponible|a été fermée|offre (a été |est )?(clôturée|fermée|expirée)|no longer (available|accepting))/i,
+  accuse: /(bien re[çc]u|candidature est arrivée|accus(é|ons) (de )?r[ée]ception|confirm(ons|ation) (de )?(la )?r[ée]ception|nous (allons|reviendrons) (étudier|vers vous)|thank you for (applying|your application)|candidature a (bien )?été (envoyée|enregistrée|prise en compte)|has been (received|submitted)|we('| wi)ll review)/i,
+};
+function classify(text) {
+  if (KINDS.refus.test(text)) return 'refus';
+  if (KINDS.cloture.test(text)) return 'cloture';
+  if (KINDS.accuse.test(text) && !/entretien|interview/i.test(text.slice(0, 400))) return 'accuse';
+  if (KINDS.entretien.test(text)) return 'entretien';
+  return 'reponse';
+}
+const platformOf = (addr) => { const dom = addr.split('@')[1] || ''; const p = PLATFORMS.find(([, re]) => re.test(dom)); return p ? p[0] : null; };
+
+function pickCandidature(cands, subject) {
+  if (cands.length <= 1) return cands[0];
+  // Plusieurs candidatures possibles : celle dont le poste ressemble le plus à l'objet, sinon la plus récente.
+  const words = norm(subject).split(' ').filter((w) => w.length > 3);
+  const score = (c) => words.filter((w) => norm(c.poste).includes(w)).length;
+  return [...cands].sort((a, b) => score(b) - score(a) || (b.dateCandidature || '').localeCompare(a.dateCandidature || ''))[0];
+}
+function byCompanyName(items, haystack) {
+  const h = ` ${norm(haystack)} `;
+  return items.filter((c) => {
+    if (/à compléter|a completer/i.test(c.entreprise || '')) return false;
+    const n = norm((c.entreprise || '').replace(/\(.*?\)/g, ''));
+    return n.length >= 3 && h.includes(` ${n} `);
+  });
+}
+
+async function bodySnippet(client, uid) {
+  try {
+    const m = await client.fetchOne(String(uid), { source: { start: 0, maxLength: 150000 } }, { uid: true });
+    const parsed = await simpleParser(m.source);
+    let text = parsed.text || (parsed.html ? String(parsed.html).replace(/<style[\s\S]*?<\/style>|<[^>]+>/g, ' ') : '');
+    // Retire les citations des mails précédents
+    text = text.split(/\n\s*(?:Le .{5,80}a écrit|On .{5,80}wrote|De ?: |From: |-----Original|________________)/)[0];
+    return text.replace(/\s+/g, ' ').trim();
+  } catch { return ''; }
+}
+
+async function syncGmail(user) {
+  if (syncRunning.has(user.id)) return syncRunning.get(user.id);
+  const job = (async () => {
+    const s = store(user.id);
+    const { settings } = s;
+    if (!settings.gmailUser || !settings.gmailAppPasswordEnc) return { skipped: true, changes: [], notifications: 0 };
+    const state = readJson(syncFile(user.id), { lastSync: null, seen: [] });
+    const seen = new Set(state.seen || []);
+    const notifSeen = new Set(state.notifSeen || []);
+    const notifs = readJson(notifFile(user.id), []);
+    const me = settings.gmailUser.toLowerCase();
+    const sinceBase = state.lastSync && state.lastNotifSync ? Math.min(new Date(state.lastSync), new Date(state.lastNotifSync)) : null;
+    const since = sinceBase ? new Date(sinceBase - 864e5) : new Date(Date.now() - SYNC_FIRST_DAYS * 864e5);
+
+    const byThread = new Map();
+    for (const c of s.items) if (c.thread && /^[0-9a-f]+$/i.test(c.thread)) byThread.set(BigInt('0x' + c.thread).toString(), c);
+
+    const client = imapClient(settings.gmailUser, decrypt(settings.gmailAppPasswordEnc));
+    await client.connect();
+    const changes = [];
+    let newNotifs = 0;
+    try {
+      const allMail = (await client.list()).find((b) => b.specialUse === '\\All');
+      if (!allMail) throw new Error('Dossier « Tous les messages » introuvable dans Gmail');
+      const lock = await client.getMailboxLock(allMail.path);
+      try {
+        const uids = await client.search({ since }, { uid: true });
+        const msgs = [];
+        if (uids && uids.length) {
+          for await (const m of client.fetch(uids.slice(-500), { envelope: true, threadId: true, flags: true, internalDate: true }, { uid: true })) msgs.push(m);
+        }
+        msgs.sort((a, b) => new Date(a.internalDate) - new Date(b.internalDate));
+        for (const m of msgs) {
+          const env = m.envelope || {};
+          const id = env.messageId || `uid:${m.uid}`;
+          const doChanges = !seen.has(id), doNotif = !notifSeen.has(id);
+          if ((!doChanges && !doNotif) || (m.flags && m.flags.has('\\Draft'))) continue;
+          seen.add(id); notifSeen.add(id);
+          const fromObj = (env.from && env.from[0]) || {};
+          const from = (fromObj.address || '').toLowerCase();
+          const fromName = fromObj.name || from;
+          const to = [...(env.to || []), ...(env.cc || [])].map((a) => (a.address || '').toLowerCase());
+          const outgoing = from === me;
+          const when = new Date(env.date || m.internalDate);
+          const date = dayOf(when);
+          const subject = env.subject || '';
+          const threadHex = m.threadId ? BigInt(m.threadId).toString(16) : null;
+
+          let c = m.threadId && byThread.get(String(m.threadId));
+          if (!c) {
+            const targets = outgoing ? to : [from];
+            c = pickCandidature(s.items.filter((x) => addrList(x).some((a) => targets.includes(a))), subject);
+          }
+          const platform = outgoing ? null : platformOf(from);
+          if (!c && !outgoing && (platform || RECRUIT_RE.test(subject))) {
+            // Plateformes et sites carrière : le nom de l'entreprise est dans l'expéditeur ou l'objet.
+            c = pickCandidature(byCompanyName(s.items, `${fromName} ${subject}`), subject);
+          }
+
+          if (outgoing) {
+            if (!c || !doChanges) continue;
+            if (!c.dateCandidature || date <= c.dateCandidature) continue; // le mail de candidature lui-même
+            if (c.derniereRelance && c.derniereRelance >= date && !c.brouillonRelance) continue;
+            const nb = (parseInt(c.nbRelances, 10) || 0) + 1;
+            Object.assign(c, { derniereRelance: date, nbRelances: String(nb), brouillonRelance: '', updatedAt: new Date().toISOString() });
+            const note = `Relance n°${nb} envoyée le ${frDate(date)} (détectée dans Gmail).`;
+            c.notes = c.notes ? `${c.notes}\n${note}` : note;
+            changes.push({ id: c.id, entreprise: c.entreprise, type: 'relance', date });
+            notifs.push({ id: crypto.randomUUID(), kind: 'relance', date: when.toISOString(), subject: subject.slice(0, 300), from: me, fromName: 'Toi',
+              snippet: `Relance envoyée à ${to.join(', ')}`, candidatureId: c.id, entreprise: c.entreprise, thread: threadHex, read: true });
+            continue;
+          }
+
+          if (NOISE_FROM.test(from) || NOISE_SUBJECT.test(subject)) continue;
+          if (!c && !platform && !RECRUIT_RE.test(subject)) continue; // sans rapport avec les candidatures
+
+          const snippet = await bodySnippet(client, m.uid);
+          const kind = classify(`${subject} ${snippet}`);
+          if (!c && kind === 'reponse' && !platform) continue; // trop incertain pour notifier
+
+          let suggestion = null;
+          if (c) {
+            if (kind === 'refus' && !['refus_direct', 'refus_entretien', 'retenu'].includes(c.statut)) suggestion = c.statut === 'entretien' || c.dateEntretien ? 'refus_entretien' : 'refus_direct';
+            if (kind === 'entretien' && ['postule', 'repondu'].includes(c.statut)) suggestion = 'entretien';
+            if (kind === 'cloture' && c.statut === 'postule') suggestion = 'cloture';
+            if (doChanges && !['accuse', 'cloture'].includes(kind) && c.statut === 'postule' && (!c.dateCandidature || date >= c.dateCandidature)) {
+              Object.assign(c, { statut: 'repondu', dateReponse: c.dateReponse || date, updatedAt: new Date().toISOString() });
+              const note = `Réponse reçue le ${frDate(date)} : « ${subject.slice(0, 120)} » (détectée dans Gmail).`;
+              c.notes = c.notes ? `${c.notes}\n${note}` : note;
+              changes.push({ id: c.id, entreprise: c.entreprise, type: 'reponse', date });
+            }
+          }
+          notifs.push({
+            id: crypto.randomUUID(), kind, date: when.toISOString(), subject: subject.slice(0, 300),
+            from, fromName: String(fromName).slice(0, 120), platform, snippet: snippet.slice(0, 400), thread: threadHex,
+            candidatureId: c ? c.id : null, entreprise: c ? c.entreprise : null, suggestion,
+            read: (Date.now() - when) / 864e5 > 3, // l'historique importé au premier passage arrive déjà « lu »
+          });
+          newNotifs++;
+        }
+      } finally { lock.release(); }
+    } finally {
+      await client.logout().catch(() => {});
+    }
+    if (changes.length) saveItems(user.id);
+    notifs.sort((a, b) => b.date.localeCompare(a.date));
+    writeJson(notifFile(user.id), notifs.slice(0, 300));
+    const now = new Date().toISOString();
+    writeJson(syncFile(user.id), { lastSync: now, lastNotifSync: now, seen: [...seen].slice(-5000), notifSeen: [...notifSeen].slice(-5000) });
+    return { changes, notifications: newNotifs, lastSync: now };
+  })();
+  syncRunning.set(user.id, job);
+  try { return await job; } finally { syncRunning.delete(user.id); }
 }
 
 // ---------- HTTP ----------
@@ -363,6 +548,78 @@ async function handleApi(req, res, url, method, user, session) {
     return send(res, 200, { count: s.items.length });
   }
 
+  // ---- Synchronisation Gmail ----
+  if (url === '/api/sync' && method === 'POST') {
+    const result = await syncGmail(user);
+    return send(res, 200, { ...result, items: s.items });
+  }
+  if (url === '/api/sync' && method === 'GET') {
+    return send(res, 200, { lastSync: readJson(syncFile(user.id), {}).lastSync || null, gmail: Boolean(s.settings.gmailUser && s.settings.gmailAppPasswordEnc) });
+  }
+
+  // ---- Centre de notifications ----
+  if (url === '/api/notifications' && method === 'GET') {
+    const list = readJson(notifFile(user.id), []);
+    return send(res, 200, { notifications: list, unread: list.filter((n) => !n.read).length });
+  }
+  if (url === '/api/notifications/read' && method === 'POST') {
+    const body = await readBody(req);
+    const list = readJson(notifFile(user.id), []);
+    const ids = Array.isArray(body.ids) ? new Set(body.ids) : null;
+    for (const n of list) if (!ids || ids.has(n.id)) n.read = true;
+    writeJson(notifFile(user.id), list);
+    return send(res, 200, { unread: list.filter((n) => !n.read).length });
+  }
+  const na = url.match(/^\/api\/notifications\/([\w-]+)\/(apply|dismiss|create|link)$/);
+  if (na && method === 'POST') {
+    const list = readJson(notifFile(user.id), []);
+    const n = list.find((x) => x.id === na[1]);
+    if (!n) return send(res, 404, { error: 'Notification introuvable' });
+    const body = await readBody(req);
+    let item = null;
+    if (na[2] === 'dismiss') {
+      list.splice(list.indexOf(n), 1);
+    } else if (na[2] === 'apply') {
+      item = items.find((c) => c.id === n.candidatureId);
+      const statut = String(body.statut || n.suggestion || '');
+      if (!item) return send(res, 404, { error: 'Candidature introuvable' });
+      if (!['repondu', 'entretien', 'retenu', 'refus_entretien', 'refus_direct', 'cloture'].includes(statut)) return send(res, 400, { error: 'Statut invalide' });
+      const day = n.date.slice(0, 10);
+      Object.assign(item, { statut, dateReponse: item.dateReponse || day, updatedAt: new Date().toISOString() });
+      if (statut === 'entretien' && !item.dateEntretien) item.dateEntretien = day;
+      Object.assign(n, { suggestion: null, applied: statut, read: true });
+    } else if (na[2] === 'link') {
+      item = items.find((c) => c.id === String(body.candidatureId || ''));
+      if (!item) return send(res, 404, { error: 'Candidature introuvable' });
+      // Les prochains mails de cet expéditeur seront reconnus (sauf adresses génériques des plateformes).
+      if (!addrList(item).includes(n.from) && !platformOf(n.from)) item.email = [item.email, n.from].filter(Boolean).join(', ');
+      Object.assign(n, { candidatureId: item.id, entreprise: item.entreprise, read: true });
+      if (n.kind === 'refus') n.suggestion = item.statut === 'entretien' || item.dateEntretien ? 'refus_entretien' : 'refus_direct';
+      if (n.kind === 'entretien' && ['postule', 'repondu'].includes(item.statut)) n.suggestion = 'entretien';
+      if (n.kind === 'cloture' && item.statut === 'postule') n.suggestion = 'cloture';
+    } else { // create
+      const domain = (n.from.split('@')[1] || '').split('.').slice(-2, -1)[0] || '';
+      // Nom d'expéditeur sans les mots génériques (« NewCorp Recrutement » → « NewCorp »), sinon le domaine.
+      const generic = /\b(no-?reply|ne-?pas-?repondre|recrutement|recruitment|recruiting|candidatures?|rh|hr|system|talent|acquisition|team|équipe|l'équipe|de|d'|the|careers?|jobs?)\b/gi;
+      const cleaned = n.fromName && n.fromName !== n.from ? n.fromName.replace(/\s*(via|sur|on)\s+\w+.*$/i, '').replace(/\(.*?\)/g, ' ').replace(generic, ' ').replace(/[-–|:]+/g, ' ').replace(/\s+/g, ' ').trim() : '';
+      const guess = cleaned.length >= 2 ? cleaned : domain.charAt(0).toUpperCase() + domain.slice(1);
+      const now = new Date().toISOString();
+      item = {
+        id: crypto.randomUUID(), createdAt: now, updatedAt: now,
+        entreprise: String(body.entreprise || guess || 'À compléter').slice(0, 200), poste: String(body.poste || n.subject || '').slice(0, 300),
+        canal: n.platform || 'Email', type: 'Stage', email: n.platform ? '' : n.from,
+        dateCandidature: n.date.slice(0, 10),
+        statut: { refus: 'refus_direct', entretien: 'entretien', accuse: 'postule', cloture: 'cloture' }[n.kind] || 'repondu',
+        dateReponse: n.kind === 'accuse' ? '' : n.date.slice(0, 10), thread: n.thread || '', notes: `Créée depuis la notification « ${n.subject} ».`,
+      };
+      items.push(item);
+      Object.assign(n, { candidatureId: item.id, entreprise: item.entreprise, read: true, suggestion: null });
+    }
+    if (item) saveItems(user.id);
+    writeJson(notifFile(user.id), list);
+    return send(res, 200, { notifications: list, unread: list.filter((x) => !x.read).length, item });
+  }
+
   if ((url === '/api/settings' || url === '/api/config') && method === 'GET') return send(res, 200, publicSettings(s.settings));
 
   if (url === '/api/settings' && method === 'PUT') {
@@ -378,6 +635,7 @@ async function handleApi(req, res, url, method, user, session) {
     // Mot de passe d'application : vide = on garde l'actuel ; clearPassword = on l'efface.
     if (body.clearPassword) next.gmailAppPasswordEnc = '';
     else if (body.gmailAppPassword) next.gmailAppPasswordEnc = encrypt(String(body.gmailAppPassword).replace(/\s/g, '').slice(0, 64));
+    if (next.gmailUser !== s.settings.gmailUser) writeJson(syncFile(user.id), { lastSync: null, seen: [] }); // nouveau compte Gmail : on repart de zéro
     s.settings = next;
     saveSettings(user.id);
     return send(res, 200, publicSettings(s.settings));
@@ -411,11 +669,11 @@ async function handleApi(req, res, url, method, user, session) {
     const text = String(body.body || '').trim().slice(0, 20000);
     if (!subject || !text) return send(res, 400, { error: "L'objet et le message sont obligatoires" });
     const draft = await createGmailDraft(settings, { to: to.join(', '), subject, text, thread: items[idx].canal === 'Email' ? items[idx].thread : null });
+    // Le brouillon ne compte comme relance qu'une fois envoyé (détecté par la synchronisation).
     const today = new Date().toISOString().slice(0, 10);
     const c = items[idx];
-    const nb = (parseInt(c.nbRelances, 10) || 0) + 1;
-    const note = `Brouillon de relance n°${nb} créé le ${today.split('-').reverse().join('/')} pour ${to.join(', ')}${draft.inThread ? " (dans le fil d'origine)" : ''}.`;
-    items[idx] = { ...c, derniereRelance: today, nbRelances: String(nb), notes: c.notes ? `${c.notes}\n${note}` : note, updatedAt: new Date().toISOString() };
+    const note = `Brouillon de relance créé le ${today.split('-').reverse().join('/')} pour ${to.join(', ')}${draft.inThread ? " (dans le fil d'origine)" : ''}.`;
+    items[idx] = { ...c, brouillonRelance: today, notes: c.notes ? `${c.notes}\n${note}` : note, updatedAt: new Date().toISOString() };
     saveItems(user.id);
     return send(res, 200, { ...items[idx], draft });
   }

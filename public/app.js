@@ -671,6 +671,157 @@ function bindSettings() {
   });
 }
 
+// ---------- Centre de notifications ----------
+const NOTIF_KINDS = {
+  entretien: { icon: '🎙️', label: 'propose un entretien' },
+  reponse:   { icon: '💬', label: 'a répondu' },
+  refus:     { icon: '✋', label: 'refus' },
+  accuse:    { icon: '📨', label: 'accusé de réception' },
+  cloture:   { icon: '🔒', label: 'offre clôturée' },
+  relance:   { icon: '↻', label: 'relance envoyée' },
+};
+let notifs = [], notifFilter = 'all';
+const freshIds = new Set(); // non lues à l'ouverture : restent en surbrillance pendant la session
+
+const relTime = (iso) => {
+  const d = new Date(iso), days = Math.floor((Date.now() - d) / 864e5);
+  if (days < 1) return `aujourd'hui, ${d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}`;
+  if (days < 2) return 'hier';
+  if (days < 7) return `il y a ${days} jours`;
+  return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+};
+
+async function loadNotifs() {
+  try {
+    const r = await api('GET', '/api/notifications');
+    notifs = r.notifications;
+    renderBadge(r.unread);
+    if (!$('#notif-panel').hidden) renderNotifs();
+  } catch { /* pas bloquant */ }
+}
+
+function renderBadge(unread) {
+  const b = $('#notif-badge');
+  b.hidden = !unread;
+  b.textContent = unread > 9 ? '9+' : String(unread);
+  $('#btn-notifs').title = unread ? `${unread} notification(s) non lue(s)` : 'Notifications';
+}
+
+function notifMatches(n) {
+  switch (notifFilter) {
+    case 'unread': return !n.read || freshIds.has(n.id);
+    case 'positif': return ['entretien', 'reponse'].includes(n.kind);
+    case 'refus': return ['refus', 'cloture'].includes(n.kind);
+    case 'accuse': return n.kind === 'accuse';
+    case 'orphan': return !n.candidatureId && n.kind !== 'relance';
+    default: return true;
+  }
+}
+
+function notifHtml(n) {
+  const k = NOTIF_KINDS[n.kind] || NOTIF_KINDS.reponse;
+  const who = n.entreprise || n.fromName || n.from;
+  const sugg = n.suggestion && STATUTS[n.suggestion];
+  const options = items.slice().sort((a, b) => a.entreprise.localeCompare(b.entreprise))
+    .map((c) => `<option value="${esc(c.id)}">${esc(c.entreprise)} — ${esc((c.poste || '').slice(0, 50))}</option>`).join('');
+  return `<article class="notif kind-${esc(n.kind)} ${!n.read || freshIds.has(n.id) ? 'unread' : ''}" data-id="${esc(n.id)}">
+    <div class="notif-icon">${k.icon}</div>
+    <div class="notif-body">
+      <div class="notif-title"><b>${esc(who)}</b> · ${esc(k.label)}${n.applied ? ` <span class="chip done">✔ ${esc(STATUTS[n.applied]?.label || '')}</span>` : ''}</div>
+      <div class="notif-meta">${relTime(n.date)}${n.platform ? ` · <span class="chip">${esc(n.platform)}</span>` : ''}${!n.candidatureId && n.kind !== 'relance' ? ' · <span class="chip todo">non associée</span>' : ''}</div>
+      <div class="notif-subject">${esc(n.subject)}</div>
+      ${n.snippet ? `<div class="notif-snippet">${esc(n.snippet)}</div>` : ''}
+      <div class="notif-actions">
+        ${sugg ? `<button class="cta small-btn" data-act="apply">Passer en « ${esc(sugg.label)} »</button>` : ''}
+        ${n.candidatureId ? `<button class="ghost small-btn" data-act="open">Voir la fiche</button>` : ''}
+        ${!n.candidatureId && n.kind !== 'relance' ? `<button class="ghost small-btn" data-act="create">➕ Créer la candidature</button>
+          <select class="link-select" data-act="link" aria-label="Associer à une candidature"><option value="">🔗 Associer à…</option>${options}</select>` : ''}
+        ${n.thread ? `<a class="ghost small-btn" href="${gmailUrl(n.thread)}" target="_blank" rel="noopener">Ouvrir dans Gmail ↗</a>` : ''}
+        <button class="ghost small-btn icon-only" data-act="dismiss" title="Supprimer la notification">✕</button>
+      </div>
+    </div>
+  </article>`;
+}
+
+function renderNotifs() {
+  document.querySelectorAll('#notif-filters button').forEach((b) => b.classList.toggle('on', b.dataset.f === notifFilter));
+  const list = notifs.filter(notifMatches);
+  const unread = notifs.filter((n) => !n.read).length;
+  $('#notif-sub').textContent = config.gmail
+    ? `${notifs.length} notification${notifs.length > 1 ? 's' : ''} tirée${notifs.length > 1 ? 's' : ''} de ta boîte Gmail (Indeed, LinkedIn, Hellowork et recruteurs compris)${unread ? ` · ${unread} non lue${unread > 1 ? 's' : ''}` : ''}`
+    : 'Configure Gmail dans ⚙️ Paramètres pour voir ici les réponses des recruteurs.';
+  // Regroupement par période
+  const groups = [['Aujourd\'hui', 1], ['Cette semaine', 7], ['Ce mois-ci', 31], ['Plus ancien', Infinity]];
+  let html = '', prev = 0;
+  for (const [label, maxDays] of groups) {
+    // max(0, …) : un mail daté de quelques minutes « dans le futur » (horloge décalée) reste dans « Aujourd'hui ».
+    const part = list.filter((n) => { const d = Math.max(0, (Date.now() - new Date(n.date)) / 864e5); return d >= prev && d < maxDays; });
+    prev = maxDays;
+    if (part.length) html += `<h3 class="notif-group">${label}</h3>` + part.map(notifHtml).join('');
+  }
+  $('#notif-list').innerHTML = html || `<p class="muted empty">${notifs.length ? 'Rien dans ce filtre.' : 'Aucune notification pour l\'instant. Elles apparaîtront ici à chaque synchronisation avec Gmail.'}</p>`;
+}
+
+async function openNotifs() {
+  notifs.filter((n) => !n.read).forEach((n) => freshIds.add(n.id));
+  $('#notif-panel').hidden = false; $('#notif-backdrop').hidden = false;
+  renderNotifs();
+  if (notifs.some((n) => !n.read)) {
+    const r = await api('POST', '/api/notifications/read', {});
+    notifs.forEach((n) => { n.read = true; });
+    renderBadge(r.unread);
+  }
+}
+function closeNotifs() { $('#notif-panel').hidden = true; $('#notif-backdrop').hidden = true; }
+
+async function notifAction(id, act, extra = {}) {
+  const r = await api('POST', `/api/notifications/${id}/${act}`, extra);
+  notifs = r.notifications;
+  renderBadge(r.unread);
+  if (r.item) {
+    const i = items.findIndex((c) => c.id === r.item.id);
+    if (i === -1) items.push(r.item); else items[i] = r.item;
+    render();
+  }
+  renderNotifs();
+  return r;
+}
+
+function bindNotifs() {
+  $('#btn-notifs').addEventListener('click', () => ($('#notif-panel').hidden ? openNotifs() : closeNotifs()));
+  $('#notif-close').addEventListener('click', closeNotifs);
+  $('#notif-backdrop').addEventListener('click', closeNotifs);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#notif-panel').hidden) closeNotifs(); });
+  $('#notif-readall').addEventListener('click', async () => {
+    freshIds.clear();
+    const r = await api('POST', '/api/notifications/read', {});
+    notifs.forEach((n) => { n.read = true; });
+    renderBadge(r.unread); renderNotifs();
+  });
+  $('#notif-filters').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-f]'); if (!b) return;
+    notifFilter = b.dataset.f; renderNotifs();
+  });
+  $('#notif-list').addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-act]'); if (!btn) return;
+    const card = btn.closest('.notif'), n = notifs.find((x) => x.id === card.dataset.id);
+    try {
+      if (btn.dataset.act === 'open') { closeNotifs(); openForm(items.find((c) => c.id === n.candidatureId)); return; }
+      if (btn.dataset.act === 'apply') { const r = await notifAction(n.id, 'apply'); toast(`${r.item.entreprise} → ${STATUTS[r.item.statut].icon} ${STATUTS[r.item.statut].label}`); }
+      if (btn.dataset.act === 'create') { const r = await notifAction(n.id, 'create'); toast(`Candidature « ${r.item.entreprise} » créée — vérifie la fiche`); closeNotifs(); openForm(r.item); }
+      if (btn.dataset.act === 'dismiss') await notifAction(n.id, 'dismiss');
+    } catch (err) { alert(err.message); }
+  });
+  $('#notif-list').addEventListener('change', async (e) => {
+    const sel = e.target.closest('select[data-act="link"]'); if (!sel || !sel.value) return;
+    const card = sel.closest('.notif');
+    try {
+      const r = await notifAction(card.dataset.id, 'link', { candidatureId: sel.value });
+      toast(`Associée à ${r.item.entreprise} — les prochains mails de cet expéditeur seront reconnus`);
+    } catch (err) { alert(err.message); }
+  });
+}
+
 // ---------- Synchronisation avec Gmail ----------
 // Au lancement, au retour sur l'onglet (ex. après avoir envoyé un mail dans Gmail) et toutes les 5 minutes.
 const SYNC_EVERY = 5 * 60 * 1000, SYNC_MIN_GAP = 30 * 1000;
@@ -710,6 +861,8 @@ async function syncNow({ manual = false } = {}) {
     const parts = [];
     if (rel.length) parts.push(`${rel.length} relance${rel.length > 1 ? 's' : ''} envoyée${rel.length > 1 ? 's' : ''} (${rel.map((c) => c.entreprise).slice(0, 3).join(', ')})`);
     if (rep.length) parts.push(`${rep.length} réponse${rep.length > 1 ? 's' : ''} reçue${rep.length > 1 ? 's' : ''} (${rep.map((c) => c.entreprise).slice(0, 3).join(', ')})`);
+    await loadNotifs();
+    if (res.notifications) parts.push(`🔔 ${res.notifications} nouvelle${res.notifications > 1 ? 's' : ''} notification${res.notifications > 1 ? 's' : ''}`);
     if (parts.length) toast('📬 Gmail : ' + parts.join(' · '));
     else if (manual) toast('Tout est à jour ✔');
   } catch (err) {
@@ -733,6 +886,7 @@ function bindSync() {
   bindChart();
   bindRelance();
   bindSettings();
+  bindNotifs();
   me = await api('GET', '/api/auth/me');
   $('#account-email').textContent = me.email;
   $('#avatar').textContent = me.email.charAt(0).toUpperCase();
@@ -745,6 +899,7 @@ function bindSync() {
   if (params.get('action') === 'new') setTimeout(() => openForm(null), 0);
   render();
   bindSync();
+  loadNotifs();
   renderSyncLabel((await api('GET', '/api/sync')).lastSync);
   syncNow();
 })();

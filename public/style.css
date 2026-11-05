@@ -278,3 +278,41 @@ body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inse
 .chart-data th, .chart-data td { padding: .35rem .7rem; }
 .tooltip .key { margin-right: .3rem; }
 @media (max-width: 700px) { .chart-panel { margin: 0 1rem 1rem; } }
+
+/* ---------- centre de notifications ---------- */
+.bell { position: relative; }
+.bell .badge { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  background: var(--s-refus_direct); color: #fff; font-size: .68rem; font-weight: 700; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--bg); }
+.drawer-backdrop { position: fixed; inset: 0; z-index: 40; background: rgba(5, 7, 20, .55); backdrop-filter: blur(2px); }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 45; width: min(480px, 100vw); display: flex; flex-direction: column;
+  background: var(--surface); border-left: 1px solid var(--line); box-shadow: -30px 0 60px rgba(0,0,0,.45); animation: slidein .2s ease-out;
+  padding-top: env(safe-area-inset-top); }
+@keyframes slidein { from { transform: translateX(30px); opacity: 0; } }
+.drawer-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; padding: 1.2rem 1.2rem .4rem; }
+.drawer-head h2 { margin: 0; font-size: 1.15rem; }
+.drawer-sub { margin: 0; padding: 0 1.2rem; font-size: .8rem; }
+.chips { display: flex; flex-wrap: wrap; gap: .35rem; padding: .8rem 1.2rem; border-bottom: 1px solid var(--line); }
+.chips button { padding: .3rem .65rem; border-radius: 999px; border: 1px solid var(--line); font-size: .76rem; color: var(--ink-2); }
+.chips button.on { background: var(--grad); border-color: transparent; color: #fff; }
+.notif-list { overflow-y: auto; padding: .4rem .8rem 2rem; flex: 1; }
+.notif-group { margin: 1rem .4rem .4rem; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.notif { display: flex; gap: .7rem; padding: .8rem .7rem; border-radius: 12px; border: 1px solid transparent; }
+.notif + .notif { margin-top: .2rem; }
+.notif:hover { background: rgba(255,255,255,.03); }
+.notif.unread { background: rgba(139, 92, 246, .09); border-color: rgba(139, 92, 246, .28); }
+.notif-icon { flex: none; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--surface-2); font-size: 1rem; }
+.kind-entretien .notif-icon { box-shadow: inset 0 0 0 1px var(--s-entretien); }
+.kind-reponse .notif-icon { box-shadow: inset 0 0 0 1px var(--s-repondu); }
+.kind-refus .notif-icon { box-shadow: inset 0 0 0 1px var(--s-refus_direct); }
+.kind-accuse .notif-icon { box-shadow: inset 0 0 0 1px var(--s-postule); }
+.notif-body { min-width: 0; flex: 1; }
+.notif-title { font-size: .88rem; }
+.notif-meta { font-size: .74rem; color: var(--muted); margin-top: .1rem; }
+.notif-subject { font-size: .82rem; color: var(--ink-2); margin-top: .35rem; font-weight: 500; }
+.notif-snippet { font-size: .78rem; color: var(--muted); margin-top: .2rem; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.notif-actions { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .55rem; align-items: center; }
+.small-btn { padding: .32rem .6rem !important; font-size: .76rem !important; border-radius: 8px !important; text-decoration: none; color: var(--ink); box-shadow: none !important; }
+.icon-only { margin-left: auto; color: var(--muted); }
+.link-select { width: auto; max-width: 180px; padding: .3rem .5rem; font-size: .76rem; border-radius: 8px; }
+.empty { padding: 1.5rem .5rem; text-align: center; }
+@media (max-width: 700px) { .drawer { width: 100vw; border-left: 0; } .link-select { max-width: 100%; } }

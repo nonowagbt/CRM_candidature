@@ -31,6 +31,7 @@
       <button id="btn-add-physique" class="ghost" title="CV déposé sur place">📍 Candidature sur place</button>
       <button id="btn-add" class="cta">＋ Nouvelle candidature</button>
       <span class="account" id="account" title="Compte connecté"><span class="avatar" id="avatar"></span><span class="mail-txt" id="account-email"></span></span>
+      <button class="ghost bell" id="btn-notifs" title="Notifications" aria-haspopup="dialog">🔔<span class="badge" id="notif-badge" hidden></span></button>
       <button class="ghost" id="btn-settings" title="Paramètres">⚙️</button>
       <div class="menu">
         <button class="ghost" id="btn-menu" aria-haspopup="true">⋯</button>
@@ -104,6 +105,27 @@
       </table>
     </div>
   </main>
+
+  <div class="drawer-backdrop" id="notif-backdrop" hidden></div>
+  <aside class="drawer" id="notif-panel" aria-label="Notifications" hidden>
+    <div class="drawer-head">
+      <h2>🔔 Notifications</h2>
+      <div class="row">
+        <button class="ghost small-btn" id="notif-readall">Tout marquer comme lu</button>
+        <button class="ghost x" id="notif-close" aria-label="Fermer">✕</button>
+      </div>
+    </div>
+    <p class="muted drawer-sub" id="notif-sub"></p>
+    <div class="chips" id="notif-filters">
+      <button data-f="all" class="on">Toutes</button>
+      <button data-f="unread">Non lues</button>
+      <button data-f="positif">Réponses &amp; entretiens</button>
+      <button data-f="refus">Refus</button>
+      <button data-f="accuse">Accusés de réception</button>
+      <button data-f="orphan">À associer</button>
+    </div>
+    <div class="notif-list" id="notif-list"></div>
+  </aside>
 
   <div id="tooltip" class="tooltip" hidden></div>
   <div id="toast" class="toast" hidden></div>

@@ -54,6 +54,19 @@ Le bouton **⚙️** en haut à droite ouvre les paramètres du compte connecté
 - **Profil** : nom d'expéditeur, titre et sous-titre de l'appli, paragraphe de présentation et signature utilisés dans les relances,
   délai avant le badge « ⏰ À relancer ».
 
+## 🔔 Centre de notifications
+
+La cloche en haut à droite liste les derniers mails liés à tes candidatures, tirés de Gmail à chaque synchronisation
+(recruteurs, sites carrière, **Indeed, LinkedIn, Hellowork, Welcome to the Jungle**…) :
+
+- chaque mail est classé : **entretien proposé, réponse, refus, accusé de réception, offre clôturée**, ou relance envoyée ;
+- il est rattaché à la bonne candidature (fil Gmail, adresse, ou nom de l'entreprise pour les plateformes) ;
+- un bouton applique le **statut suggéré** (ex. « Passer en Refus sans entretien ») ;
+- un mail non reconnu peut être **associé** à une candidature (ses prochains mails seront reconnus) ou servir à **créer** une candidature ;
+- filtres : non lues, réponses & entretiens, refus, accusés de réception, à associer.
+
+LinkedIn et Indeed ne proposent pas d'accès à tes candidatures pour une appli externe : leurs notifications arrivent par mail, c'est par là que le CRM les suit.
+
 ## Relances → brouillons Gmail
 
 Le bouton **↻** (cartes, liste, fiche) dépose une relance pré-rédigée dans **tes brouillons Gmail**, rattachée au fil d'origine
