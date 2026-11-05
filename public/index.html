@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CRM Candidatures</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="glow g1"></div><div class="glow g2"></div>
+
+  <header class="top">
+    <div class="brand">
+      <div class="logo">⚽</div>
+      <div>
+        <h1 id="app-title">Mes <span class="grad">candidatures</span></h1>
+        <p class="tagline" id="app-tagline"></p>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button id="btn-add-physique" class="ghost" title="CV déposé sur place">📍 Candidature sur place</button>
+      <button id="btn-add" class="cta">＋ Nouvelle candidature</button>
+      <button class="ghost" id="btn-settings" title="Paramètres">⚙️</button>
+      <div class="menu">
+        <button class="ghost" id="btn-menu" aria-haspopup="true">⋯</button>
+        <div class="menu-pop" id="menu-pop" hidden>
+          <button id="btn-export-csv">Exporter en CSV</button>
+          <button id="btn-export-json">Sauvegarder (JSON)</button>
+          <label>Importer un JSON<input type="file" id="file-import" accept=".json" hidden></label>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <section class="kpis" id="kpis"></section>
+
+  <section class="panel pipeline">
+    <div class="panel-head">
+      <h2>Pipeline</h2>
+      <span class="muted" id="pipeline-sub"></span>
+    </div>
+    <div class="bar" id="bar"></div>
+    <div class="legend" id="legend"></div>
+  </section>
+
+  <section class="toolbar">
+    <div class="search"><span>⌕</span><input type="search" id="search" placeholder="Rechercher une entreprise, un poste, un email…"></div>
+    <select id="filter-canal"></select>
+    <select id="filter-type"></select>
+    <div class="seg" role="tablist">
+      <button data-view="board" class="on">Tableau</button>
+      <button data-view="list">Liste</button>
+    </div>
+  </section>
+
+  <main>
+    <div id="board" class="board"></div>
+    <div id="list" class="panel list" hidden>
+      <table>
+        <thead><tr>
+          <th data-sort="dateCandidature">Date</th>
+          <th data-sort="entreprise">Entreprise</th>
+          <th data-sort="poste">Poste</th>
+          <th data-sort="canal">Canal</th>
+          <th>Email / contact</th>
+          <th data-sort="statut">Statut</th>
+          <th></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </main>
+
+  <div id="tooltip" class="tooltip" hidden></div>
+  <div id="toast" class="toast" hidden></div>
+
+  <dialog id="dialog">
+    <form id="form" method="dialog">
+      <div class="dlg-head">
+        <h2 id="form-title">Nouvelle candidature</h2>
+        <button type="button" class="ghost x" id="btn-close" aria-label="Fermer">✕</button>
+      </div>
+      <div class="status-pick" id="status-pick"></div>
+      <input type="hidden" name="statut">
+      <div class="grid">
+        <label>Entreprise *<input name="entreprise" required></label>
+        <label>Poste<input name="poste"></label>
+        <label>Type<select name="type"></select></label>
+        <label>Canal<select name="canal"></select></label>
+        <label>Email(s) de candidature<input name="email" placeholder="si envoyée par mail"></label>
+        <label>Contact<input name="contact" placeholder="nom du recruteur"></label>
+        <label>Date de candidature<input name="dateCandidature" type="date"></label>
+        <label>Date de réponse<input name="dateReponse" type="date"></label>
+        <label>Date d'entretien<input name="dateEntretien" type="date"></label>
+        <label>Lien de l'offre<input name="lienOffre" type="url" placeholder="https://"></label>
+        <label id="lbl-adresse" class="full">📍 Adresse (là où tu as déposé ton CV)<input name="adresse" placeholder="ex. 12 rue du Dôme, 67000 Strasbourg"></label>
+      </div>
+      <label>Notes<textarea name="notes" rows="3" placeholder="Ressenti, prochaine étape, relance…"></textarea></label>
+      <input type="hidden" name="thread">
+      <div class="form-actions">
+        <button type="button" id="btn-delete" class="danger">Supprimer</button>
+        <button type="button" id="btn-relance" class="ghost">↻ Brouillon de relance</button>
+        <span class="spacer"></span>
+        <button type="button" class="ghost" id="btn-cancel">Annuler</button>
+        <button type="submit" class="cta">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+
+
+
+  <dialog id="settings-dialog">
+    <form id="settings-form" method="dialog">
+      <div class="dlg-head">
+        <h2>⚙️ Paramètres</h2>
+        <button type="button" class="ghost x" id="settings-close" aria-label="Fermer">✕</button>
+      </div>
+
+      <fieldset>
+        <legend>✉️ Gmail — brouillons de relance</legend>
+        <p class="hint" id="gmail-status"></p>
+        <div class="grid">
+          <label>Adresse Gmail<input name="gmailUser" type="email" placeholder="prenom.nom@gmail.com" autocomplete="username"></label>
+          <label>Mot de passe d'application
+            <input name="gmailAppPassword" type="password" autocomplete="new-password" placeholder="xxxx xxxx xxxx xxxx">
+          </label>
+        </div>
+        <details class="howto">
+          <summary>Comment obtenir un mot de passe d'application ?</summary>
+          <ol>
+            <li>Active la <b>validation en 2 étapes</b> sur ton compte Google.</li>
+            <li>Va sur <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">myaccount.google.com/apppasswords</a>.</li>
+            <li>Donne un nom (ex. « CRM candidatures ») puis copie le code de 16 lettres ici.</li>
+          </ol>
+          <p class="muted">Ce n'est pas ton vrai mot de passe Gmail : il sert uniquement à déposer les brouillons, et tu peux le révoquer à tout moment. Il reste sur ton ordinateur (<code>data/settings.json</code>) et n'est jamais renvoyé à la page.</p>
+        </details>
+        <div class="row">
+          <button type="button" class="ghost" id="settings-test">🔌 Tester la connexion</button>
+          <button type="button" class="danger" id="settings-clear-pass">Effacer le mot de passe</button>
+          <span id="test-result" class="muted"></span>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>🙋 Profil &amp; relances</legend>
+        <div class="grid">
+          <label>Ton nom (expéditeur)<input name="senderName" placeholder="Prénom Nom"></label>
+          <label>Relancer après (jours)<input name="relanceJours" type="number" min="1" max="365"></label>
+          <label>Titre de l'appli<input name="titre" placeholder="Mes candidatures"></label>
+          <label>Sous-titre<input name="tagline" placeholder="Objectif : …"></label>
+        </div>
+        <label>Présentation (paragraphe ajouté dans les relances)
+          <textarea name="pitch" rows="3" placeholder="Étudiant en … je recherche un stage de … à partir de …"></textarea></label>
+        <label>Signature
+          <textarea name="signature" rows="4" placeholder="Prénom Nom&#10;06 …&#10;email@…&#10;linkedin.com/in/…"></textarea></label>
+      </fieldset>
+
+      <div class="form-actions">
+        <span class="spacer"></span>
+        <button type="button" class="ghost" id="settings-cancel">Annuler</button>
+        <button type="submit" class="cta">Enregistrer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
